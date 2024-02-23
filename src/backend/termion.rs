@@ -67,6 +67,7 @@ where
     W: Write,
 {
     writer: W,
+    cursor: Option<(u16, u16)>,
 }
 
 impl<W> TermionBackend<W>
@@ -83,7 +84,10 @@ where
     /// let backend = TermionBackend::new(stdout());
     /// ```
     pub const fn new(writer: W) -> Self {
-        Self { writer }
+        Self {
+            writer,
+            cursor: None,
+        }
     }
 }
 
@@ -137,11 +141,21 @@ where
     }
 
     fn get_cursor(&mut self) -> io::Result<(u16, u16)> {
-        termion::cursor::DetectCursorPos::cursor_pos(&mut self.writer).map(|(x, y)| (x - 1, y - 1))
+        match termion::cursor::DetectCursorPos::cursor_pos(&mut self.writer) {
+            Ok((x, y)) => {
+                let cursor = (x - 1, y - 1);
+                self.cursor = Some(cursor);
+                Ok(cursor)
+            }
+            Err(_) => self
+                .cursor
+                .ok_or_else(|| io::Error::other("No last known cursor position")),
+        }
     }
 
     fn set_cursor(&mut self, x: u16, y: u16) -> io::Result<()> {
         write!(self.writer, "{}", termion::cursor::Goto(x + 1, y + 1))?;
+        self.cursor = Some((x, y));
         self.writer.flush()
     }
 
