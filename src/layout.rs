@@ -7,6 +7,8 @@ mod direction;
 mod flex;
 #[allow(clippy::module_inception)]
 mod layout;
+#[cfg(feature = "macros")]
+mod macros;
 mod margin;
 mod position;
 mod rect;
