@@ -66,7 +66,6 @@ use std::{
 ///
 /// [ANSI color table]: https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub enum Color {
     /// Resets the foreground or background color
     #[default]
@@ -142,13 +141,52 @@ impl Color {
 }
 
 #[cfg(feature = "serde")]
+impl serde::Serialize for Color {
+    /// This utilises the [`Display`] implementation for serialization.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+#[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for Color {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        FromStr::from_str(&s).map_err(serde::de::Error::custom)
+        /// Colors are currently serialized with the `Display` implementation, so
+        /// RGB values are serialized via hex, for example "#FFFFFF".
+        ///
+        /// Previously they were serialized using serde derive, which encoded
+        /// RGB values as a map, for example { "rgb": [255, 255, 255] }.
+        ///
+        /// The deserialization implementation utilises a `Helper` struct
+        /// to be able to support both formats for backwards compatibility.
+        #[derive(serde::Deserialize)]
+        enum ColorWrapper {
+            Rgb(u8, u8, u8),
+            Indexed(u8),
+        }
+
+        #[derive(serde::Deserialize)]
+        #[serde(untagged)]
+        enum Helper {
+            String(String),
+            ColorWrapper(ColorWrapper),
+        }
+
+        let multi_type = Helper::deserialize(deserializer)
+            .map_err(|err| serde::de::Error::custom(format!("Failed to parse Colors: {err}")))?;
+        match multi_type {
+            Helper::String(s) => FromStr::from_str(&s).map_err(serde::de::Error::custom),
+            Helper::ColorWrapper(color_wrapper) => match color_wrapper {
+                ColorWrapper::Rgb(r, g, b) => Ok(Self::Rgb(r, g, b)),
+                ColorWrapper::Indexed(index) => Ok(Self::Indexed(index)),
+            },
+        }
     }
 }
 
@@ -578,5 +616,43 @@ mod tests {
         let color: Result<_, serde::de::value::Error> =
             Color::deserialize("#00000000".into_deserializer());
         assert!(color.is_err());
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn serialize_then_deserialize() -> Result<(), serde_json::Error> {
+        let json_rgb = serde_json::to_string(&Color::Rgb(255, 0, 255))?;
+        assert_eq!(json_rgb, "\"#FF00FF\"");
+        assert_eq!(
+            serde_json::from_str::<Color>(&json_rgb)?,
+            Color::Rgb(255, 0, 255)
+        );
+
+        let json_white = serde_json::to_string(&Color::White)?;
+        assert_eq!(json_white, "\"White\"");
+
+        let json_indexed = serde_json::to_string(&Color::Indexed(10))?;
+        assert_eq!(json_indexed, "\"10\"");
+        assert_eq!(
+            serde_json::from_str::<Color>(&json_indexed)?,
+            Color::Indexed(10)
+        );
+
+        Ok(())
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn deserialize_with_previous_format() -> Result<(), serde_json::Error> {
+        assert_eq!(Color::White, serde_json::from_str::<Color>("\"White\"")?);
+        assert_eq!(
+            Color::Rgb(255, 0, 255),
+            serde_json::from_str::<Color>("{\"Rgb\":[255,0,255]}")?
+        );
+        assert_eq!(
+            Color::Indexed(10),
+            serde_json::from_str::<Color>("{\"Indexed\":10}")?
+        );
+        Ok(())
     }
 }
