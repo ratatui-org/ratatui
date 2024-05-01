@@ -120,7 +120,7 @@ fn render_vertical_scrollbar_with_arrows(
     let paragraph = Paragraph::new(text)
         .gray()
         .block(create_block("Vertical scrollbar with arrows"))
-        .scroll((app.vertical_scroll as u16, 0));
+        .scroll((u16::try_from(app.vertical_scroll).unwrap_or(u16::MAX), 0));
     f.render_widget(paragraph, chunk);
     f.render_stateful_widget(
         Scrollbar::new(ScrollbarOrientation::VerticalRight)
@@ -143,7 +143,7 @@ fn render_vertical_scrollbar_without_arrows(
         .block(create_block(
             "Vertical scrollbar without arrows, without track symbol and mirrored",
         ))
-        .scroll((app.vertical_scroll as u16, 0));
+        .scroll((u16::try_from(app.vertical_scroll).unwrap_or(u16::MAX), 0));
     f.render_widget(paragraph, chunk);
     f.render_stateful_widget(
         Scrollbar::new(ScrollbarOrientation::VerticalLeft)
@@ -171,7 +171,7 @@ fn render_horizontal_scrollbar_with_arrows(
         .block(create_block(
             "Horizontal scrollbar with only begin arrow & custom thumb symbol",
         ))
-        .scroll((0, app.horizontal_scroll as u16));
+        .scroll((0, u16::try_from(app.horizontal_scroll).unwrap_or(u16::MAX)));
     f.render_widget(paragraph, chunk);
     f.render_stateful_widget(
         Scrollbar::new(ScrollbarOrientation::HorizontalBottom)
@@ -197,7 +197,7 @@ fn render_horizontal_scrollbar_without_arrows(
         .block(create_block(
             "Horizontal scrollbar without arrows & custom thumb and track symbol",
         ))
-        .scroll((0, app.horizontal_scroll as u16));
+        .scroll((0, u16::try_from(app.horizontal_scroll).unwrap_or(u16::MAX)));
     f.render_widget(paragraph, chunk);
     f.render_stateful_widget(
         Scrollbar::new(ScrollbarOrientation::HorizontalBottom)
@@ -211,7 +211,6 @@ fn render_horizontal_scrollbar_without_arrows(
     );
 }
 
-//#[allow(clippy::too_many_lines, clippy::cast_possible_truncation)]
 fn ui(f: &mut Frame, app: &mut App) {
     let size = f.size();
 
