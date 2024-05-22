@@ -1,9 +1,9 @@
-use std::fmt;
+use std::{fmt, ops};
 
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-use crate::{buffer::Cell, prelude::*};
+use crate::{buffer::Cell, layout::Position, prelude::*};
 
 /// A buffer that maps to the desired content of the terminal after the draw call
 ///
@@ -23,8 +23,8 @@ use crate::{buffer::Cell, prelude::*};
 ///     width: 10,
 ///     height: 5,
 /// });
-/// buf.get_mut(0, 2).set_symbol("x");
-/// assert_eq!(buf.get(0, 2).symbol(), "x");
+/// buf[(0, 2)].set_symbol("x");
+/// assert_eq!(buf[(0, 2)].symbol(), "x");
 ///
 /// buf.set_string(
 ///     3,
@@ -32,13 +32,13 @@ use crate::{buffer::Cell, prelude::*};
 ///     "string",
 ///     Style::default().fg(Color::Red).bg(Color::White),
 /// );
-/// let cell = buf.get(5, 0);
+/// let cell = &buf[(5, 0)];
 /// assert_eq!(cell.symbol(), "r");
 /// assert_eq!(cell.fg, Color::Red);
 /// assert_eq!(cell.bg, Color::White);
 ///
-/// buf.get_mut(5, 0).set_char('x');
-/// assert_eq!(buf.get(5, 0).symbol(), "x");
+/// buf[(5, 0)].set_char('x');
+/// assert_eq!(buf[(5, 0)].symbol(), "x");
 /// ```
 #[derive(Default, Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -93,17 +93,88 @@ impl Buffer {
     }
 
     /// Returns a reference to Cell at the given coordinates
+    ///
+    /// Callers should generally use the [`ops::Index`] trait ([`Buffer[Position]`]) or the
+    /// [`Buffer::cell`] method instead of this method.
+    ///
+    /// Note that conventionally methods named `get` usually return `Option<&T>`, but this method
+    /// panics instead. This is kept for backwards compatibility. See `get_opt` for a safe
+    /// alternative.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the index is out of bounds.
     #[track_caller]
+    #[deprecated(note = "Use Buffer[] or Buffer::cell instead")]
     pub fn get(&self, x: u16, y: u16) -> &Cell {
         let i = self.index_of(x, y);
         &self.content[i]
     }
 
     /// Returns a mutable reference to Cell at the given coordinates
+    ///
+    /// Callers should generally use the [`ops::IndexMut`] trait (`&mut Buffer[Position]`) or the
+    /// [`Buffer::cell_mut`] method instead of this method.
+    ///
+    /// Note that conventionally methods named `get_mut` usually return `Option<&mut T>`, but this
+    /// method panics instead. This is kept for backwards compatibility. See `cell_mut` for a safe
+    /// alternative.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the index is out of bounds.
     #[track_caller]
+    #[deprecated(note = "Use Buffer[] or Buffer::cell_mut instead")]
     pub fn get_mut(&mut self, x: u16, y: u16) -> &mut Cell {
         let i = self.index_of(x, y);
         &mut self.content[i]
+    }
+
+    /// Returns a reference to Cell at the given coordinates.
+    ///
+    /// Returns `None` if the index is out of bounds.
+    ///
+    /// Note that unlike `get`, this method accepts a `Position` instead of `x` and `y` coordinates.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use ratatui::{prelude::*, buffer::Cell, layout::Position};
+    /// let mut buffer = Buffer::empty(Rect::new(0, 0, 10, 10));
+    ///
+    /// assert_eq!(buffer.cell(Position::new(0, 0)), Some(&Cell::default()));
+    /// assert_eq!(buffer.cell(Position::new(10, 10)), None);
+    /// assert_eq!(buffer.cell((0, 0)), Some(&Cell::default()));
+    /// assert_eq!(buffer.cell((10, 10)), None);
+    /// ```
+    pub fn cell<P: Into<Position>>(&self, pos: P) -> Option<&Cell> {
+        let pos = pos.into();
+        let index = self.index_of_opt(pos.x, pos.y)?;
+        self.content.get(index)
+    }
+
+    /// Returns a mutable reference to Cell at the given coordinates
+    ///
+    /// Returns `None` if the index is out of bounds.
+    ///
+    /// Note that unlike `get`, this method accepts a `Position` instead of `x` and `y` coordinates.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use ratatui::{prelude::*, buffer::Cell, layout::Position};
+    /// let mut buffer = Buffer::empty(Rect::new(0, 0, 10, 10));
+    /// if let Some(cell) = buffer.cell_mut(Position::new(0, 0)) {
+    ///     *cell = Cell::default();
+    /// }
+    /// if let Some(cell) = buffer.cell_mut((0, 0)) {
+    ///     *cell = Cell::default();
+    /// }
+    /// ```
+    pub fn cell_mut<P: Into<Position>>(&mut self, pos: P) -> Option<&mut Cell> {
+        let pos = pos.into();
+        let index = self.index_of_opt(pos.x, pos.y)?;
+        self.content.get_mut(index)
     }
 
     /// Returns the index in the `Vec<Cell>` for the given global (x, y) coordinates.
@@ -114,8 +185,7 @@ impl Buffer {
     ///
     /// ```
     /// # use ratatui::prelude::*;
-    /// let rect = Rect::new(200, 100, 10, 10);
-    /// let buffer = Buffer::empty(rect);
+    /// let buffer = Buffer::empty(Rect::new(200, 100, 10, 10));
     /// // Global coordinates to the top corner of this buffer's area
     /// assert_eq!(buffer.index_of(200, 100), 0);
     /// ```
@@ -126,23 +196,35 @@ impl Buffer {
     ///
     /// ```should_panic
     /// # use ratatui::prelude::*;
-    /// let rect = Rect::new(200, 100, 10, 10);
-    /// let buffer = Buffer::empty(rect);
+    /// let buffer = Buffer::empty(Rect::new(200, 100, 10, 10));
     /// // Top coordinate is outside of the buffer in global coordinate space, as the Buffer's area
     /// // starts at (200, 100).
     /// buffer.index_of(0, 0); // Panics
     /// ```
     #[track_caller]
     pub fn index_of(&self, x: u16, y: u16) -> usize {
-        debug_assert!(
-            x >= self.area.left()
-                && x < self.area.right()
-                && y >= self.area.top()
-                && y < self.area.bottom(),
-            "Trying to access position outside the buffer: x={x}, y={y}, area={:?}",
-            self.area
-        );
-        ((y - self.area.y) * self.area.width + (x - self.area.x)) as usize
+        self.index_of_opt(x, y).unwrap_or_else(|| {
+            panic!(
+                "index outside of buffer: the area is {area:?} but index is ({x}, {y})",
+                area = self.area,
+            )
+        })
+    }
+
+    /// Returns the index in the `Vec<Cell>` for the given global (x, y) coordinates.
+    ///
+    /// Returns `None` if the given coordinates are outside of the Buffer's area.
+    ///
+    /// Note that this is private because of <https://github.com/ratatui-org/ratatui/issues/1122>
+    const fn index_of_opt(&self, x: u16, y: u16) -> Option<usize> {
+        let area = self.area;
+        if x < area.left() || x >= area.right() || y < area.top() || y >= area.bottom() {
+            return None;
+        }
+        // remove offset
+        let y = y - self.area.y;
+        let x = x - self.area.x;
+        Some((y * self.area.width + x) as usize)
     }
 
     /// Returns the (global) coordinates of a cell given its index
@@ -218,12 +300,12 @@ impl Buffer {
             });
         let style = style.into();
         for (symbol, width) in graphemes {
-            self.get_mut(x, y).set_symbol(symbol).set_style(style);
+            self[(x, y)].set_symbol(symbol).set_style(style);
             let next_symbol = x + width;
             x += 1;
             // Reset following cells if multi-width (they would be hidden by the grapheme),
             while x < next_symbol {
-                self.get_mut(x, y).reset();
+                self[(x, y)].reset();
                 x += 1;
             }
         }
@@ -266,7 +348,7 @@ impl Buffer {
         let area = self.area.intersection(area);
         for y in area.top()..area.bottom() {
             for x in area.left()..area.right() {
-                self.get_mut(x, y).set_style(style);
+                self[(x, y)].set_style(style);
             }
         }
     }
@@ -369,6 +451,52 @@ impl Buffer {
             invalidated = std::cmp::max(affected_width, invalidated).saturating_sub(1);
         }
         updates
+    }
+}
+
+impl<P: Into<Position>> ops::Index<P> for Buffer {
+    type Output = Cell;
+
+    /// Returns the Cell at the given position
+    ///
+    /// # Panics
+    ///
+    /// May panic if the given position is outside the buffer's area.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use ratatui::{prelude::*, buffer::Cell, layout::Position};
+    /// let buf = Buffer::empty(Rect::new(0, 0, 10, 10));
+    /// let cell = &buf[(0, 0)];
+    /// let cell = &buf[Position::new(0, 0)];
+    /// ```
+    fn index(&self, pos: P) -> &Self::Output {
+        let pos = pos.into();
+        let index = self.index_of(pos.x, pos.y);
+        &self.content[index]
+    }
+}
+
+impl<P: Into<Position>> ops::IndexMut<P> for Buffer {
+    /// Returns a mutable reference to the Cell at the given position
+    ///
+    /// # Panics
+    ///
+    /// May panic if the given position is outside the buffer's area.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use ratatui::{prelude::*, buffer::Cell, layout::Position};
+    /// let mut buf = Buffer::empty(Rect::new(0, 0, 10, 10));
+    /// buf[(0, 0)].set_symbol("A");
+    /// buf[Position::new(0, 0)].set_symbol("B");
+    /// ```
+    fn index_mut(&mut self, pos: P) -> &mut Self::Output {
+        let pos = pos.into();
+        let index = self.index_of(pos.x, pos.y);
+        &mut self.content[index]
     }
 }
 
@@ -562,14 +690,87 @@ mod tests {
         buf.pos_of(100);
     }
 
-    #[test]
-    #[should_panic(expected = "outside the buffer")]
-    fn index_of_panics_on_out_of_bounds() {
-        let rect = Rect::new(0, 0, 10, 10);
-        let buf = Buffer::empty(rect);
+    #[rstest]
+    #[case::left(9, 10)]
+    #[case::top(10, 9)]
+    #[case::right(20, 10)]
+    #[case::bottom(10, 20)]
+    #[should_panic(
+        expected = "index outside of buffer: the area is Rect { x: 10, y: 10, width: 10, height: 10 } but index is"
+    )]
+    fn index_of_panics_on_out_of_bounds(#[case] x: u16, #[case] y: u16) {
+        let _ = Buffer::empty(Rect::new(10, 10, 10, 10)).index_of(x, y);
+    }
 
-        // width is 10; zero-indexed means that 10 would be the 11th cell.
-        buf.index_of(10, 0);
+    #[test]
+    fn test_cell() {
+        let buf = Buffer::with_lines(["Hello", "World"]);
+
+        let mut expected = Cell::default();
+        expected.set_symbol("H");
+
+        assert_eq!(buf.cell((0, 0)), Some(&expected));
+        assert_eq!(buf.cell((10, 10)), None);
+        assert_eq!(buf.cell(Position::new(0, 0)), Some(&expected));
+        assert_eq!(buf.cell(Position::new(10, 10)), None);
+    }
+
+    #[test]
+    fn test_cell_mut() {
+        let mut buf = Buffer::with_lines(["Hello", "World"]);
+
+        let mut expected = Cell::default();
+        expected.set_symbol("H");
+
+        assert_eq!(buf.cell_mut((0, 0)), Some(&mut expected));
+        assert_eq!(buf.cell_mut((10, 10)), None);
+        assert_eq!(buf.cell_mut(Position::new(0, 0)), Some(&mut expected));
+        assert_eq!(buf.cell_mut(Position::new(10, 10)), None);
+    }
+
+    #[test]
+    fn index() {
+        let buf = Buffer::with_lines(["Hello", "World"]);
+
+        let mut expected = Cell::default();
+        expected.set_symbol("H");
+
+        assert_eq!(buf[(0, 0)], expected);
+    }
+
+    #[rstest]
+    #[case::left(9, 10)]
+    #[case::top(10, 9)]
+    #[case::right(20, 10)]
+    #[case::bottom(10, 20)]
+    #[should_panic(
+        expected = "index outside of buffer: the area is Rect { x: 10, y: 10, width: 10, height: 10 } but index is"
+    )]
+    fn index_out_of_bounds_panics(#[case] x: u16, #[case] y: u16) {
+        let rect = Rect::new(10, 10, 10, 10);
+        let buf = Buffer::empty(rect);
+        let _ = buf[(x, y)];
+    }
+
+    #[test]
+    fn index_mut() {
+        let mut buf = Buffer::with_lines(["Cat", "Dog"]);
+        buf[(0, 0)].set_symbol("B");
+        buf[Position::new(0, 1)].set_symbol("L");
+        assert_eq!(buf, Buffer::with_lines(["Bat", "Log"]));
+    }
+
+    #[rstest]
+    #[case::left(9, 10)]
+    #[case::top(10, 9)]
+    #[case::right(20, 10)]
+    #[case::bottom(10, 20)]
+    #[should_panic(
+        expected = "index outside of buffer: the area is Rect { x: 10, y: 10, width: 10, height: 10 } but index is"
+    )]
+    fn index_mut_out_of_bounds_panics(#[case] x: u16, #[case] y: u16) {
+        let mut buf = Buffer::empty(Rect::new(10, 10, 10, 10));
+        buf[(x, y)].set_symbol("A");
     }
 
     #[test]
