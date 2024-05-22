@@ -93,14 +93,12 @@ impl Buffer {
     }
 
     /// Returns a reference to Cell at the given coordinates
-    #[track_caller]
     pub fn get(&self, x: u16, y: u16) -> &Cell {
         let i = self.index_of(x, y);
         &self.content[i]
     }
 
     /// Returns a mutable reference to Cell at the given coordinates
-    #[track_caller]
     pub fn get_mut(&mut self, x: u16, y: u16) -> &mut Cell {
         let i = self.index_of(x, y);
         &mut self.content[i]
@@ -132,7 +130,6 @@ impl Buffer {
     /// // starts at (200, 100).
     /// buffer.index_of(0, 0); // Panics
     /// ```
-    #[track_caller]
     pub fn index_of(&self, x: u16, y: u16) -> usize {
         debug_assert!(
             x >= self.area.left()

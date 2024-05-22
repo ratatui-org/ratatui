@@ -143,7 +143,7 @@ fn ui(f: &mut Frame, app: &App) {
     ];
 
     let paragraph = Paragraph::new(text)
-        .block(Block::bordered().title("Panic Handler Demo"))
+        .block(Block::bordered().title_top("Panic Handler Demo"))
         .centered();
 
     f.render_widget(paragraph, f.size());

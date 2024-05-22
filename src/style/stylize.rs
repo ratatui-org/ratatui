@@ -133,7 +133,7 @@ macro_rules! modifier {
 ///     "world".green().on_yellow().not_bold(),
 /// ]);
 /// let paragraph = Paragraph::new(line).italic().underlined();
-/// let block = Block::bordered().title("Title").on_white().bold();
+/// let block = Block::bordered().title_top("Title").on_white().bold();
 /// ```
 pub trait Stylize<'a, T>: Sized {
     #[must_use = "`bg` returns the modified style without modifying the original"]

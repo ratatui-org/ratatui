@@ -50,9 +50,9 @@ fn render_hops(selected_row: usize, area: Rect, buf: &mut Buffer) {
         .map(|hop| Row::new(vec![hop.host, hop.address]))
         .collect_vec();
     let block = Block::new()
-        .padding(Padding::new(1, 1, 1, 1))
+        .title_top("Traceroute bad.horse".bold().white())
         .title_alignment(Alignment::Center)
-        .title("Traceroute bad.horse".bold().white());
+        .padding(Padding::new(1, 1, 1, 1));
     StatefulWidget::render(
         Table::new(rows, [Constraint::Max(100), Constraint::Length(15)])
             .header(Row::new(vec!["Host", "Address"]).set_style(THEME.traceroute.header))
@@ -91,7 +91,7 @@ pub fn render_ping(progress: usize, area: Rect, buf: &mut Buffer) {
     Sparkline::default()
         .block(
             Block::new()
-                .title("Ping")
+                .title_top("Ping")
                 .title_alignment(Alignment::Center)
                 .border_type(BorderType::Thick),
         )

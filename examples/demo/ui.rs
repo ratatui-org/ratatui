@@ -14,7 +14,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         .iter()
         .map(|t| text::Line::from(Span::styled(*t, Style::default().fg(Color::Green))))
         .collect::<Tabs>()
-        .block(Block::bordered().title(app.title))
+        .block(Block::bordered().title_top(app.title))
         .highlight_style(Style::default().fg(Color::Yellow))
         .select(app.tabs.index);
     f.render_widget(tabs, chunks[0]);
@@ -46,12 +46,12 @@ fn draw_gauges(f: &mut Frame, app: &mut App, area: Rect) {
     ])
     .margin(1)
     .split(area);
-    let block = Block::bordered().title("Graphs");
+    let block = Block::bordered().title_top("Graphs");
     f.render_widget(block, area);
 
     let label = format!("{:.2}%", app.progress * 100.0);
     let gauge = Gauge::default()
-        .block(Block::new().title("Gauge:"))
+        .block(Block::new().title_top("Gauge:"))
         .gauge_style(
             Style::default()
                 .fg(Color::Magenta)
@@ -64,7 +64,7 @@ fn draw_gauges(f: &mut Frame, app: &mut App, area: Rect) {
     f.render_widget(gauge, chunks[0]);
 
     let sparkline = Sparkline::default()
-        .block(Block::new().title("Sparkline:"))
+        .block(Block::new().title_top("Sparkline:"))
         .style(Style::default().fg(Color::Green))
         .data(&app.sparkline.points)
         .bar_set(if app.enhanced_graphics {
@@ -75,7 +75,7 @@ fn draw_gauges(f: &mut Frame, app: &mut App, area: Rect) {
     f.render_widget(sparkline, chunks[1]);
 
     let line_gauge = LineGauge::default()
-        .block(Block::new().title("LineGauge:"))
+        .block(Block::new().title_top("LineGauge:"))
         .gauge_style(Style::default().fg(Color::Magenta))
         .line_set(if app.enhanced_graphics {
             symbols::line::THICK
@@ -110,7 +110,7 @@ fn draw_charts(f: &mut Frame, app: &mut App, area: Rect) {
                 .map(|i| ListItem::new(vec![text::Line::from(Span::raw(*i))]))
                 .collect();
             let tasks = List::new(tasks)
-                .block(Block::bordered().title("List"))
+                .block(Block::bordered().title_top("List"))
                 .highlight_style(Style::default().add_modifier(Modifier::BOLD))
                 .highlight_symbol("> ");
             f.render_stateful_widget(tasks, chunks[0], &mut app.tasks.state);
@@ -138,12 +138,12 @@ fn draw_charts(f: &mut Frame, app: &mut App, area: Rect) {
                     ListItem::new(content)
                 })
                 .collect();
-            let logs = List::new(logs).block(Block::bordered().title("List"));
+            let logs = List::new(logs).block(Block::bordered().title_top("List"));
             f.render_stateful_widget(logs, chunks[1], &mut app.logs.state);
         }
 
         let barchart = BarChart::default()
-            .block(Block::bordered().title("Bar chart"))
+            .block(Block::bordered().title_top("Bar chart"))
             .data(&app.barchart)
             .bar_width(3)
             .bar_gap(2)
@@ -195,7 +195,7 @@ fn draw_charts(f: &mut Frame, app: &mut App, area: Rect) {
         ];
         let chart = Chart::new(datasets)
             .block(
-                Block::bordered().title(Span::styled(
+                Block::bordered().title_top(Span::styled(
                     "Chart",
                     Style::default()
                         .fg(Color::Cyan)
@@ -252,7 +252,7 @@ fn draw_text(f: &mut Frame, area: Rect) {
             "One more thing is that it should display unicode characters: 10€"
         ),
     ];
-    let block = Block::bordered().title(Span::styled(
+    let block = Block::bordered().title_top(Span::styled(
         "Footer",
         Style::default()
             .fg(Color::Magenta)
@@ -290,11 +290,11 @@ fn draw_second_tab(f: &mut Frame, app: &mut App, area: Rect) {
             .style(Style::default().fg(Color::Yellow))
             .bottom_margin(1),
     )
-    .block(Block::bordered().title("Servers"));
+    .block(Block::bordered().title_top("Servers"));
     f.render_widget(table, chunks[0]);
 
     let map = Canvas::default()
-        .block(Block::bordered().title("World"))
+        .block(Block::bordered().title_top("World"))
         .paint(|ctx| {
             ctx.draw(&Map {
                 color: Color::White,
@@ -388,6 +388,6 @@ fn draw_third_tab(f: &mut Frame, _app: &mut App, area: Rect) {
             Constraint::Ratio(1, 3),
         ],
     )
-    .block(Block::bordered().title("Colors"));
+    .block(Block::bordered().title_top("Colors"));
     f.render_widget(table, chunks[0]);
 }

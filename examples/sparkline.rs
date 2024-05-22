@@ -153,7 +153,7 @@ fn ui(f: &mut Frame, app: &App) {
         .block(
             Block::new()
                 .borders(Borders::LEFT | Borders::RIGHT)
-                .title("Data1"),
+                .title_top("Data1"),
         )
         .data(&app.data1)
         .style(Style::default().fg(Color::Yellow));
@@ -161,8 +161,8 @@ fn ui(f: &mut Frame, app: &App) {
     let sparkline = Sparkline::default()
         .block(
             Block::new()
-                .borders(Borders::LEFT | Borders::RIGHT)
-                .title("Data2"),
+                .title_top("Data2")
+                .borders(Borders::LEFT | Borders::RIGHT),
         )
         .data(&app.data2)
         .style(Style::default().bg(Color::Green));
@@ -172,7 +172,7 @@ fn ui(f: &mut Frame, app: &App) {
         .block(
             Block::new()
                 .borders(Borders::LEFT | Borders::RIGHT)
-                .title("Data3"),
+                .title_top("Data3"),
         )
         .data(&app.data3)
         .style(Style::default().fg(Color::Red));

@@ -17,7 +17,7 @@ use crate::{prelude::*, widgets::Block};
 /// use ratatui::{prelude::*, widgets::*};
 ///
 /// Gauge::default()
-///     .block(Block::bordered().title("Progress"))
+///     .block(Block::bordered().title_top("Progress"))
 ///     .gauge_style(
 ///         Style::default()
 ///             .fg(Color::White)
@@ -250,7 +250,7 @@ fn get_unicode_block<'a>(frac: f64) -> &'a str {
 /// use ratatui::{prelude::*, widgets::*};
 ///
 /// LineGauge::default()
-///     .block(Block::bordered().title("Progress"))
+///     .block(Block::bordered().title_top("Progress"))
 ///     .gauge_style(
 ///         Style::default()
 ///             .fg(Color::White)

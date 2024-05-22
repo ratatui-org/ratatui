@@ -51,7 +51,7 @@ fn main() -> io::Result<()> {
 
 fn hello_world(frame: &mut Frame) {
     frame.render_widget(
-        Paragraph::new("Hello World!").block(Block::bordered().title("Greeting")),
+        Paragraph::new("Hello World!").block(Block::bordered().title_top("Greeting")),
         frame.size(),
     );
 }
@@ -79,15 +79,15 @@ fn layout(frame: &mut Frame) {
     let [left, right] = horizontal.areas(main_area);
 
     frame.render_widget(
-        Block::new().borders(Borders::TOP).title("Title Bar"),
+        Block::new().borders(Borders::TOP).title_top("Title Bar"),
         title_bar,
     );
     frame.render_widget(
-        Block::new().borders(Borders::TOP).title("Status Bar"),
+        Block::new().borders(Borders::TOP).title_top("Status Bar"),
         status_bar,
     );
-    frame.render_widget(Block::bordered().title("Left"), left);
-    frame.render_widget(Block::bordered().title("Right"), right);
+    frame.render_widget(Block::bordered().title_top("Left"), left);
+    frame.render_widget(Block::bordered().title_top("Right"), right);
 }
 
 fn styling(frame: &mut Frame) {

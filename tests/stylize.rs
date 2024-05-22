@@ -61,7 +61,7 @@ fn barchart_can_be_stylized() {
 #[test]
 fn block_can_be_stylized() -> io::Result<()> {
     let block = Block::bordered()
-        .title("Title".light_blue())
+        .title_top("Title".light_blue())
         .on_cyan()
         .cyan();
 

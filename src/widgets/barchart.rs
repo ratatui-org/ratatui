@@ -45,7 +45,7 @@ pub use bar_group::BarGroup;
 /// use ratatui::{prelude::*, widgets::*};
 ///
 /// BarChart::default()
-///     .block(Block::bordered().title("BarChart"))
+///     .block(Block::bordered().title_top("BarChart"))
 ///     .bar_width(3)
 ///     .bar_gap(1)
 ///     .group_gap(3)
@@ -644,7 +644,7 @@ mod tests {
         let mut buffer = Buffer::empty(Rect::new(0, 0, 10, 5));
         let block = Block::bordered()
             .border_type(BorderType::Double)
-            .title("Block");
+            .title_top("Block");
         let widget = BarChart::default()
             .data(&[("foo", 1), ("bar", 2)])
             .block(block);

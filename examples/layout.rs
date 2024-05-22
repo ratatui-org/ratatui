@@ -191,7 +191,7 @@ fn render_example_combination(
     constraints: Vec<(Constraint, Constraint)>,
 ) {
     let block = Block::bordered()
-        .title(title.gray())
+        .title_top(title.gray())
         .style(Style::reset())
         .border_style(Style::default().fg(Color::DarkGray));
     let inner = block.inner(area);

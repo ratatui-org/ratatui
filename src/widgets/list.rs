@@ -384,7 +384,7 @@ where
 /// # let area = Rect::default();
 /// let items = ["Item 1", "Item 2", "Item 3"];
 /// let list = List::new(items)
-///     .block(Block::bordered().title("List"))
+///     .block(Block::bordered().title_top("List"))
 ///     .style(Style::default().fg(Color::White))
 ///     .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
 ///     .highlight_symbol(">>")
@@ -405,7 +405,7 @@ where
 /// let mut state = ListState::default();
 /// let items = ["Item 1", "Item 2", "Item 3"];
 /// let list = List::new(items)
-///     .block(Block::bordered().title("List"))
+///     .block(Block::bordered().title_top("List"))
 ///     .highlight_style(Style::new().add_modifier(Modifier::REVERSED))
 ///     .highlight_symbol(">>")
 ///     .repeat_highlight_symbol(true);
@@ -536,8 +536,8 @@ impl<'a> List<'a> {
     ///
     /// ```rust
     /// # use ratatui::{prelude::*, widgets::*};
-    /// # let items = ["Item 1"];
-    /// let block = Block::bordered().title("List");
+    /// # let items = vec!["Item 1"];
+    /// let block = Block::bordered().title_top("List");
     /// let list = List::new(items).block(block);
     /// ```
     #[must_use = "method moves the value of self and returns the modified value"]
@@ -1470,7 +1470,7 @@ mod tests {
     #[test]
     fn test_list_with_empty_strings() {
         let list = List::new(["Item 0", "", "", "Item 1", "Item 2"])
-            .block(Block::bordered().title("List"));
+            .block(Block::bordered().title_top("List"));
         let buffer = render_widget(list, 10, 7);
         let expected = Buffer::with_lines([
             "┌List────┐",
@@ -1493,7 +1493,8 @@ mod tests {
 
     #[test]
     fn test_list_block() {
-        let list = List::new(["Item 0", "Item 1", "Item 2"]).block(Block::bordered().title("List"));
+        let list =
+            List::new(["Item 0", "Item 1", "Item 2"]).block(Block::bordered().title_top("List"));
         let buffer = render_widget(list, 10, 7);
         let expected = Buffer::with_lines([
             "┌List────┐",

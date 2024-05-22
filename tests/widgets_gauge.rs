@@ -22,13 +22,13 @@ fn widgets_gauge_renders() {
                 .split(f.size());
 
             let gauge = Gauge::default()
-                .block(Block::bordered().title("Percentage"))
+                .block(Block::bordered().title_top("Percentage"))
                 .gauge_style(Style::default().bg(Color::Blue).fg(Color::Red))
                 .use_unicode(true)
                 .percent(43);
             f.render_widget(gauge, chunks[0]);
             let gauge = Gauge::default()
-                .block(Block::bordered().title("Ratio"))
+                .block(Block::bordered().title_top("Ratio"))
                 .gauge_style(Style::default().bg(Color::Blue).fg(Color::Red))
                 .use_unicode(true)
                 .ratio(0.511_313_934_313_1);
@@ -71,12 +71,12 @@ fn widgets_gauge_renders_no_unicode() {
                 .split(f.size());
 
             let gauge = Gauge::default()
-                .block(Block::bordered().title("Percentage"))
+                .block(Block::bordered().title_top("Percentage"))
                 .percent(43)
                 .use_unicode(false);
             f.render_widget(gauge, chunks[0]);
             let gauge = Gauge::default()
-                .block(Block::bordered().title("Ratio"))
+                .block(Block::bordered().title_top("Ratio"))
                 .ratio(0.211_313_934_313_1)
                 .use_unicode(false);
             f.render_widget(gauge, chunks[1]);
@@ -105,7 +105,8 @@ fn widgets_gauge_applies_styles() {
         .draw(|f| {
             let gauge = Gauge::default()
                 .block(
-                    Block::bordered().title(Span::styled("Test", Style::default().fg(Color::Red))),
+                    Block::bordered()
+                        .title_top(Span::styled("Test", Style::default().fg(Color::Red))),
                 )
                 .gauge_style(Style::default().fg(Color::Blue).bg(Color::Red))
                 .percent(43)
@@ -192,7 +193,7 @@ fn widgets_line_gauge_renders() {
                 },
             );
             let gauge = LineGauge::default()
-                .block(Block::bordered().title("Gauge 2"))
+                .block(Block::bordered().title_top("Gauge 2"))
                 .gauge_style(Style::default().fg(Color::Green))
                 .line_set(symbols::line::THICK)
                 .ratio(0.211_313_934_313_1);

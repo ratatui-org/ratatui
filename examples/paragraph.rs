@@ -129,7 +129,7 @@ fn ui(f: &mut Frame, app: &App) {
     let create_block = |title| {
         Block::bordered()
             .style(Style::default().fg(Color::Gray))
-            .title(Span::styled(
+            .title_top(Span::styled(
                 title,
                 Style::default().add_modifier(Modifier::BOLD),
             ))

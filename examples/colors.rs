@@ -232,10 +232,10 @@ fn render_indexed_colors(frame: &mut Frame, area: Rect) {
 fn title_block(title: String) -> Block<'static> {
     Block::new()
         .borders(Borders::TOP)
-        .title_alignment(Alignment::Center)
         .border_style(Style::new().dark_gray())
+        .title_top(title)
+        .title_alignment(Alignment::Center)
         .title_style(Style::new().reset())
-        .title(title)
 }
 
 fn render_indexed_grayscale(frame: &mut Frame, area: Rect) {
