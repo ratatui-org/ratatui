@@ -26,27 +26,19 @@
 // is useful when the state is only used by the widget and doesn't need to be shared with
 // other widgets.
 
-use std::{
-    io::stdout,
-    panic,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
-use color_eyre::{config::HookBuilder, eyre, Result};
+use color_eyre::Result;
 use palette::{convert::FromColorUnclamped, Okhsv, Srgb};
 use ratatui::{
     backend::{Backend, CrosstermBackend},
     buffer::Buffer,
-    crossterm::{
-        event::{self, Event, KeyCode, KeyEventKind},
-        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-        ExecutableCommand,
-    },
+    crossterm::event::{self, Event, KeyCode, KeyEventKind},
     layout::{Constraint, Layout, Rect},
     style::Color,
-    terminal::Terminal,
     text::Text,
     widgets::Widget,
+    Terminal,
 };
 
 #[derive(Debug, Default)]
@@ -100,11 +92,8 @@ struct ColorsWidget {
 }
 
 fn main() -> Result<()> {
-    install_error_hooks()?;
-    let terminal = init_terminal()?;
-    App::default().run(terminal)?;
-    restore_terminal()?;
-    Ok(())
+    let terminal = CrosstermBackend::stdout_with_defaults()?.to_terminal()?;
+    App::default().run(terminal)
 }
 
 impl App {
@@ -128,9 +117,9 @@ impl App {
     /// Currently, this only handles the q key to quit the app.
     fn handle_events(&mut self) -> Result<()> {
         // Ensure that the app only blocks for a period that allows the app to render at
-        // approximately 60 FPS (this doesn't account for the time to render the frame, and will
+        // approximately 50 FPS (this doesn't account for the time to render the frame, and will
         // also update the app immediately any time an event occurs)
-        let timeout = Duration::from_secs_f32(1.0 / 60.0);
+        let timeout = Duration::from_secs_f32(1.0 / 50.0); // 50 FPS is standard for GIFs
         if event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press && key.code == KeyCode::Char('q') {
@@ -262,37 +251,4 @@ impl ColorsWidget {
             self.colors.push(row);
         }
     }
-}
-
-/// Install `color_eyre` panic and error hooks
-///
-/// The hooks restore the terminal to a usable state before printing the error message.
-fn install_error_hooks() -> Result<()> {
-    let (panic, error) = HookBuilder::default().into_hooks();
-    let panic = panic.into_panic_hook();
-    let error = error.into_eyre_hook();
-    eyre::set_hook(Box::new(move |e| {
-        let _ = restore_terminal();
-        error(e)
-    }))?;
-    panic::set_hook(Box::new(move |info| {
-        let _ = restore_terminal();
-        panic(info);
-    }));
-    Ok(())
-}
-
-fn init_terminal() -> Result<Terminal<impl Backend>> {
-    enable_raw_mode()?;
-    stdout().execute(EnterAlternateScreen)?;
-    let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
-    terminal.clear()?;
-    terminal.hide_cursor()?;
-    Ok(terminal)
-}
-
-fn restore_terminal() -> Result<()> {
-    disable_raw_mode()?;
-    stdout().execute(LeaveAlternateScreen)?;
-    Ok(())
 }
