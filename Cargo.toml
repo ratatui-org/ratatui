@@ -159,6 +159,9 @@ unstable-rendered-line-info = []
 ## the future.
 unstable-widget-ref = []
 
+## Enables the `WidgetExt` trait which is experimental and may change in the future.
+unstable-widget-ext = []
+
 [package.metadata.docs.rs]
 all-features = true
 # see https://doc.rust-lang.org/nightly/rustdoc/scraped-examples.html
@@ -199,8 +202,8 @@ harness = false
 
 
 [[example]]
-name = "barchart"
-required-features = ["crossterm"]
+name = "ansi_buffer"
+required-features = ["unstable-widget-ext", "unstable-widget-ref"]
 doc-scrape-examples = true
 
 [[example]]
@@ -364,6 +367,11 @@ doc-scrape-examples = true
 [[example]]
 name = "user_input"
 required-features = ["crossterm"]
+doc-scrape-examples = true
+
+[[example]]
+name = "widget_ext"
+required-features = ["unstable-widget-ext"]
 doc-scrape-examples = true
 
 [[test]]
