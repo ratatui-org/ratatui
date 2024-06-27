@@ -15,4 +15,4 @@ Enter
 Sleep 2s
 Show
 Type "d"
-Sleep 30s
+Sleep 20s
