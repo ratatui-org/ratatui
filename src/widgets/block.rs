@@ -27,14 +27,18 @@ pub use title::{Position, Title};
 /// both centered and non-centered titles are rendered, the centered space is calculated based on
 /// the full width of the block, rather than the leftover width.
 ///
-/// Titles are not rendered in the corners of the block unless there is no border on that edge.
-/// If the block is too small and multiple titles overlap, the border may get cut off at a corner.
+/// Titles are not rendered in the corners of the block unless there is no border on that edge. If
+/// the block is too small and multiple titles overlap, the border may get cut off at a corner.
 ///
 /// ```plain
 /// ┌With at least a left border───
 ///
 /// Without left border───
 /// ```
+///
+/// [`Style`]s are applied first to the entire block, then to the borders, and finally to the
+/// titles. If the block is used as a container for another widget, the inner widget can also be
+/// styled. See [`Style`] for more information on how merging styles works.
 ///
 /// # Examples
 ///
@@ -396,16 +400,38 @@ impl<'a> Block<'a> {
         self
     }
 
-    /// Defines the block style.
+    /// Defines the style of the entire block.
     ///
     /// This is the most generic [`Style`] a block can receive, it will be merged with any other
-    /// more specific style. Elements can be styled further with [`Block::title_style`] and
-    /// [`Block::border_style`].
+    /// more specific styles. Elements can be styled further with [`Block::title_style`] and
+    /// [`Block::border_style`], which will be applied on top of this style. If the block is used
+    /// as a container for another widget, the inner widget can also be styled.
     ///
     /// `style` accepts any type that is convertible to [`Style`] (e.g. [`Style`], [`Color`], or
     /// your own type that implements [`Into<Style>`]).
     ///
-    /// This will also apply to the widget inside that block, unless the inner widget is styled.
+    /// This will also apply to the widget inside that block, the inner widget overrides the style.
+    ///
+    /// See [`Style`] for more information on how merging styles works.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use ratatui::{prelude::*, widgets::*};
+    /// let block = Block::new().style(Style::new().red().on_black());
+    ///
+    /// // For border and title you can additionally apply styles on top of the block level style.
+    /// let block = Block::new()
+    ///     .style(Style::new().red().bold().italic())
+    ///     .border_style(Style::new().not_italic()) // will be red and bold
+    ///     .title_style(Style::new().not_bold()) // will be red and italic
+    ///     .title("Title");
+    ///
+    /// // To style the inner widget, you can style the widget itself.
+    /// let paragraph = Paragraph::new("Content")
+    ///     .block(block)
+    ///     .style(Style::new().white().not_bold()); // will be white, and italic
+    /// ```
     #[must_use = "method moves the value of self and returns the modified value"]
     pub fn style<S: Into<Style>>(mut self, style: S) -> Self {
         self.style = style.into();
