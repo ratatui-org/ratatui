@@ -96,7 +96,7 @@ pub struct Scrollbar<'a> {
 ///             └───────┘
 ///          HorizontalBottom
 /// ```
-#[derive(Debug, Default, Display, EnumString, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Default, Display, EnumString, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum ScrollbarOrientation {
     /// Positions the scrollbar on the right, scrolling vertically
     #[default]
