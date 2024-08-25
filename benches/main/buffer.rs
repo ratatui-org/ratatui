@@ -87,7 +87,7 @@ fn create_random_buffer(area: Rect) -> Buffer {
     const PARAGRAPH_COUNT: i64 = 15;
     const SENTENCE_COUNT: i64 = 5;
     const WORD_COUNT: i64 = 20;
-    const SEPARATOR: &&str = &"\n\n";
+    const SEPARATOR: &str = "\n\n";
     let paragraphs = fakeit::words::paragraph(
         PARAGRAPH_COUNT,
         SENTENCE_COUNT,
