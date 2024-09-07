@@ -10,8 +10,10 @@ GitHub with a [breaking change] label.
 
 This is a quick summary of the sections below:
 
+- [v0.29.0](#unreleased)
+  - Removed public field `[current_column|current_row]` from `layout::rect::[Columns|Rows]`
 - [v0.28.0](#v0280)
-  ⁻ `Backend::size` returns `Size` instead of `Rect`
+  - `Backend::size` returns `Size` instead of `Rect`
   - `Backend` trait migrates to `get/set_cursor_position`
   - Ratatui now requires Crossterm 0.28.0
   - `Axis::labels` now accepts `IntoIterator<Into<Line>>`
@@ -64,6 +66,16 @@ This is a quick summary of the sections below:
 - [v0.20.0](#v0200)
   - MSRV is now 1.63.0
   - `List` no longer ignores empty strings
+
+## Unreleased
+
+### Removed public field `[current_column|current_row]` from `layout::rect::[Columns|Rows]` ([#1358])
+
+[#1358]: https://github.com/ratatui/ratatui/pull/1358
+
+The `pub` modifier has been removed from fields `layout::rect::Columns::current_column` and 
+`layout::rect::Rows::current_row`. These fields were not intended to be public and should not
+have been accessed directly.
 
 ## v0.28.0
 
