@@ -1,9 +1,5 @@
 use itertools::Itertools;
-use ratatui::{
-    buffer::Buffer,
-    layout::{Alignment, Constraint, Layout, Margin, Rect},
-    widgets::{Block, Borders, Clear, Padding, Paragraph, Widget, Wrap},
-};
+use ratatui::{prelude::*, widgets::*};
 
 use crate::{RgbSwatch, THEME};
 
@@ -68,16 +64,20 @@ impl Widget for AboutTab {
 }
 
 fn render_crate_description(area: Rect, buf: &mut Buffer) {
-    let area = area.inner(Margin {
-        vertical: 4,
-        horizontal: 2,
-    });
+    let area = area.inner(
+        &(Margin {
+            vertical: 4,
+            horizontal: 2,
+        }),
+    );
     Clear.render(area, buf); // clear out the color swatches
     Block::new().style(THEME.content).render(area, buf);
-    let area = area.inner(Margin {
-        vertical: 1,
-        horizontal: 2,
-    });
+    let area = area.inner(
+        &(Margin {
+            vertical: 1,
+            horizontal: 2,
+        }),
+    );
     let text = "- cooking up terminal user interfaces -
 
     Ratatui is a Rust crate that provides widgets (e.g. Paragraph, Table) and draws them to the \
@@ -86,7 +86,7 @@ fn render_crate_description(area: Rect, buf: &mut Buffer) {
         .style(THEME.description)
         .block(
             Block::new()
-                .title(" Ratatui ")
+                .title_top(" Ratatui ")
                 .title_alignment(Alignment::Center)
                 .borders(Borders::TOP)
                 .border_style(THEME.description_title)
@@ -108,7 +108,7 @@ pub fn render_logo(selected_row: usize, area: Rect, buf: &mut Buffer) {
     } else {
         THEME.logo.rat_eye_alt
     };
-    let area = area.inner(Margin {
+    let area = area.inner(&Margin {
         vertical: 0,
         horizontal: 2,
     });
@@ -116,7 +116,7 @@ pub fn render_logo(selected_row: usize, area: Rect, buf: &mut Buffer) {
         for (x, (ch1, ch2)) in line1.chars().zip(line2.chars()).enumerate() {
             let x = area.left() + x as u16;
             let y = area.top() + y as u16;
-            let cell = &mut buf[(x, y)];
+            let cell = buf.get_mut(x, y);
             let rat_color = THEME.logo.rat;
             let term_color = THEME.logo.term;
             match (ch1, ch2) {

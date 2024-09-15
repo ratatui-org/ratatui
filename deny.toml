@@ -1,7 +1,9 @@
 # configuration for https://github.com/EmbarkStudios/cargo-deny
 
 [licenses]
-version = 2
+default = "deny"
+unlicensed = "deny"
+copyleft = "deny"
 confidence-threshold = 0.8
 allow = [
     "Apache-2.0",
@@ -14,7 +16,8 @@ allow = [
 ]
 
 [advisories]
-version = 2
+unmaintained = "deny"
+yanked = "deny"
 
 [bans]
 multiple-versions = "allow"

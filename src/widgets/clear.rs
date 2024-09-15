@@ -11,7 +11,7 @@ use crate::prelude::*;
 /// use ratatui::{prelude::*, widgets::*};
 ///
 /// fn draw_on_clear(f: &mut Frame, area: Rect) {
-///     let block = Block::bordered().title("Block");
+///     let block = Block::bordered().title_top("Block");
 ///     f.render_widget(Clear, area); // <- this will clear/reset the area first
 ///     f.render_widget(block, area); // now render the block widget
 /// }
@@ -34,7 +34,7 @@ impl WidgetRef for Clear {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
         for x in area.left()..area.right() {
             for y in area.top()..area.bottom() {
-                buf[(x, y)].reset();
+                buf.get_mut(x, y).reset();
             }
         }
     }

@@ -9,50 +9,59 @@
 //! See the [examples readme] for more information on finding examples that match the version of the
 //! library you are using.
 //!
-//! [Ratatui]: https://github.com/ratatui/ratatui
-//! [examples]: https://github.com/ratatui/ratatui/blob/main/examples
-//! [examples readme]: https://github.com/ratatui/ratatui/blob/main/examples/README.md
+//! [Ratatui]: https://github.com/ratatui-org/ratatui
+//! [examples]: https://github.com/ratatui-org/ratatui/blob/main/examples
+//! [examples readme]: https://github.com/ratatui-org/ratatui/blob/main/examples/README.md
 
 // This example is useful for testing how your terminal emulator handles different modifiers.
 // It will render a grid of combinations of foreground and background colors with all
 // modifiers applied to them.
 
-use std::{error::Error, iter::once, result};
-
-use itertools::Itertools;
-use ratatui::{
-    crossterm::event::{self, Event, KeyCode, KeyEventKind},
-    layout::{Constraint, Layout},
-    style::{Color, Modifier, Style, Stylize},
-    text::Line,
-    widgets::Paragraph,
-    DefaultTerminal, Frame,
+use std::{
+    error::Error,
+    io::{self, Stdout},
+    iter::once,
+    result,
+    time::Duration,
 };
+
+use crossterm::{
+    event::{self, Event, KeyCode},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use itertools::Itertools;
+use ratatui::{prelude::*, widgets::Paragraph};
 
 type Result<T> = result::Result<T, Box<dyn Error>>;
 
 fn main() -> Result<()> {
-    color_eyre::install()?;
-    let terminal = ratatui::init();
-    let app_result = run(terminal);
-    ratatui::restore();
-    app_result
+    let mut terminal = setup_terminal()?;
+    let res = run_app(&mut terminal);
+    restore_terminal(terminal)?;
+    if let Err(err) = res {
+        eprintln!("{err:?}");
+    }
+    Ok(())
 }
 
-fn run(mut terminal: DefaultTerminal) -> Result<()> {
+fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> io::Result<()> {
     loop {
-        terminal.draw(draw)?;
-        if let Event::Key(key) = event::read()? {
-            if key.kind == KeyEventKind::Press && key.code == KeyCode::Char('q') {
-                return Ok(());
+        terminal.draw(ui)?;
+
+        if event::poll(Duration::from_millis(250))? {
+            if let Event::Key(key) = event::read()? {
+                if key.code == KeyCode::Char('q') {
+                    return Ok(());
+                }
             }
         }
     }
 }
 
-fn draw(frame: &mut Frame) {
+fn ui(frame: &mut Frame) {
     let vertical = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]);
-    let [text_area, main_area] = vertical.areas(frame.area());
+    let [text_area, main_area] = vertical.areas(frame.size());
     frame.render_widget(
         Paragraph::new("Note: not all terminals support all modifiers")
             .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
@@ -97,4 +106,21 @@ fn draw(frame: &mut Frame) {
             }
         }
     }
+}
+
+fn setup_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>> {
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+    terminal.hide_cursor()?;
+    Ok(terminal)
+}
+
+fn restore_terminal(mut terminal: Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    terminal.show_cursor()?;
+    Ok(())
 }

@@ -6,20 +6,21 @@ use std::io::{self, Write};
 
 #[cfg(feature = "underline-color")]
 use crossterm::style::SetUnderlineColor;
+use crossterm::{
+    cursor::{Hide, MoveTo, Show},
+    execute, queue,
+    style::{
+        Attribute as CAttribute, Attributes as CAttributes, Color as CColor, Colors, ContentStyle,
+        Print, SetAttribute, SetBackgroundColor, SetColors, SetForegroundColor,
+    },
+    terminal::{self, Clear},
+};
 
 use crate::{
     backend::{Backend, ClearType, WindowSize},
     buffer::Cell,
-    crossterm::{
-        cursor::{Hide, MoveTo, Show},
-        execute, queue,
-        style::{
-            Attribute as CAttribute, Attributes as CAttributes, Color as CColor, Colors,
-            ContentStyle, Print, SetAttribute, SetBackgroundColor, SetColors, SetForegroundColor,
-        },
-        terminal::{self, Clear},
-    },
-    layout::{Position, Size},
+    layout::Size,
+    prelude::Rect,
     style::{Color, Modifier, Style},
 };
 
@@ -44,15 +45,11 @@ use crate::{
 /// ```rust,no_run
 /// use std::io::{stderr, stdout};
 ///
-/// use ratatui::{
-///     crossterm::{
-///         terminal::{
-///             disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
-///         },
-///         ExecutableCommand,
-///     },
-///     prelude::*,
+/// use crossterm::{
+///     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+///     ExecutableCommand,
 /// };
+/// use ratatui::prelude::*;
 ///
 /// let mut backend = CrosstermBackend::new(stdout());
 /// // or
@@ -80,7 +77,7 @@ use crate::{
 /// [`Terminal`]: crate::terminal::Terminal
 /// [`backend`]: crate::backend
 /// [Crossterm]: https://crates.io/crates/crossterm
-/// [Examples]: https://github.com/ratatui/ratatui/tree/main/examples/README.md
+/// [Examples]: https://github.com/ratatui-org/ratatui/tree/main/examples/README.md
 #[derive(Debug, Default, Clone, Eq, PartialEq, Hash)]
 pub struct CrosstermBackend<W: Write> {
     /// The writer used to send commands to the terminal.
@@ -93,11 +90,6 @@ where
 {
     /// Creates a new `CrosstermBackend` with the given writer.
     ///
-    /// Most applications will use either [`stdout`](std::io::stdout) or
-    /// [`stderr`](std::io::stderr) as writer. See the [FAQ] to determine which one to use.
-    ///
-    /// [FAQ]: https://ratatui.rs/faq/#should-i-use-stdout-or-stderr
-    ///
     /// # Example
     ///
     /// ```rust,no_run
@@ -107,27 +99,6 @@ where
     /// ```
     pub const fn new(writer: W) -> Self {
         Self { writer }
-    }
-
-    /// Gets the writer.
-    #[instability::unstable(
-        feature = "backend-writer",
-        issue = "https://github.com/ratatui/ratatui/pull/991"
-    )]
-    pub const fn writer(&self) -> &W {
-        &self.writer
-    }
-
-    /// Gets the writer as a mutable reference.
-    ///
-    /// Note: writing to the writer may cause incorrect output after the write. This is due to the
-    /// way that the Terminal implements diffing Buffers.
-    #[instability::unstable(
-        feature = "backend-writer",
-        issue = "https://github.com/ratatui/ratatui/pull/991"
-    )]
-    pub fn writer_mut(&mut self) -> &mut W {
-        &mut self.writer
     }
 }
 
@@ -159,13 +130,13 @@ where
         #[cfg(feature = "underline-color")]
         let mut underline_color = Color::Reset;
         let mut modifier = Modifier::empty();
-        let mut last_pos: Option<Position> = None;
+        let mut last_pos: Option<(u16, u16)> = None;
         for (x, y, cell) in content {
             // Move the cursor if the previous location was not (x - 1, y)
-            if !matches!(last_pos, Some(p) if x == p.x + 1 && y == p.y) {
+            if !matches!(last_pos, Some(p) if x == p.0 + 1 && y == p.1) {
                 queue!(self.writer, MoveTo(x, y))?;
             }
-            last_pos = Some(Position { x, y });
+            last_pos = Some((x, y));
             if cell.modifier != modifier {
                 let diff = ModifierDiff {
                     from: modifier,
@@ -217,14 +188,12 @@ where
         execute!(self.writer, Show)
     }
 
-    fn get_cursor_position(&mut self) -> io::Result<Position> {
+    fn get_cursor(&mut self) -> io::Result<(u16, u16)> {
         crossterm::cursor::position()
-            .map(|(x, y)| Position { x, y })
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
     }
 
-    fn set_cursor_position<P: Into<Position>>(&mut self, position: P) -> io::Result<()> {
-        let Position { x, y } = position.into();
+    fn set_cursor(&mut self, x: u16, y: u16) -> io::Result<()> {
         execute!(self.writer, MoveTo(x, y))
     }
 
@@ -252,9 +221,9 @@ where
         self.writer.flush()
     }
 
-    fn size(&self) -> io::Result<Size> {
+    fn size(&self) -> io::Result<Rect> {
         let (width, height) = terminal::size()?;
-        Ok(Size { width, height })
+        Ok(Rect::new(0, 0, width, height))
     }
 
     fn window_size(&mut self) -> io::Result<WindowSize> {

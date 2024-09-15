@@ -114,14 +114,8 @@ fn draw_line_high(painter: &mut Painter, x1: usize, y1: usize, x2: usize, y2: us
 mod tests {
     use rstest::rstest;
 
-    use super::*;
-    use crate::{
-        buffer::Buffer,
-        layout::Rect,
-        style::{Style, Stylize},
-        symbols::Marker,
-        widgets::{canvas::Canvas, Widget},
-    };
+    use super::{super::*, *};
+    use crate::{buffer::Buffer, layout::Rect};
 
     #[rstest]
     #[case::off_grid(&Line::new(-1.0, -1.0, 10.0, 10.0, Color::Red), ["          "; 10])]

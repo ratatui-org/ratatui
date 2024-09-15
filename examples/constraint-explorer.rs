@@ -9,37 +9,29 @@
 //! See the [examples readme] for more information on finding examples that match the version of the
 //! library you are using.
 //!
-//! [Ratatui]: https://github.com/ratatui/ratatui
-//! [examples]: https://github.com/ratatui/ratatui/blob/main/examples
-//! [examples readme]: https://github.com/ratatui/ratatui/blob/main/examples/README.md
+//! [Ratatui]: https://github.com/ratatui-org/ratatui
+//! [examples]: https://github.com/ratatui-org/ratatui/blob/main/examples
+//! [examples readme]: https://github.com/ratatui-org/ratatui/blob/main/examples/README.md
 
-use color_eyre::Result;
+#![allow(clippy::enum_glob_use, clippy::wildcard_imports)]
+
+use std::io::{self, stdout};
+
+use color_eyre::{config::HookBuilder, Result};
+use crossterm::{
+    event::{self, Event, KeyCode, KeyEventKind},
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    ExecutableCommand,
+};
 use itertools::Itertools;
 use ratatui::{
-    buffer::Buffer,
-    crossterm::event::{self, Event, KeyCode, KeyEventKind},
-    layout::{
-        Constraint::{self, Fill, Length, Max, Min, Percentage, Ratio},
-        Flex, Layout, Rect,
-    },
-    style::{
-        palette::tailwind::{BLUE, SKY, SLATE, STONE},
-        Color, Style, Stylize,
-    },
-    symbols::{self, line},
-    text::{Line, Span, Text},
-    widgets::{Block, Paragraph, Widget, Wrap},
-    DefaultTerminal,
+    layout::{Constraint::*, Flex},
+    prelude::*,
+    style::palette::tailwind::*,
+    symbols::line,
+    widgets::{Block, Paragraph, Wrap},
 };
 use strum::{Display, EnumIter, FromRepr};
-
-fn main() -> Result<()> {
-    color_eyre::install()?;
-    let terminal = ratatui::init();
-    let app_result = App::default().run(terminal);
-    ratatui::restore();
-    app_result
-}
 
 #[derive(Default)]
 struct App {
@@ -91,13 +83,21 @@ struct ConstraintBlock {
 /// ```
 struct SpacerBlock;
 
+fn main() -> Result<()> {
+    init_error_hooks()?;
+    let terminal = init_terminal()?;
+    App::default().run(terminal)?;
+    restore_terminal()?;
+    Ok(())
+}
+
 // App behaviour
 impl App {
-    fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
+    fn run(&mut self, mut terminal: Terminal<impl Backend>) -> Result<()> {
         self.insert_test_defaults();
 
         while self.is_running() {
-            terminal.draw(|frame| frame.render_widget(&self, frame.area()))?;
+            self.draw(&mut terminal)?;
             self.handle_events()?;
         }
         Ok(())
@@ -117,24 +117,30 @@ impl App {
         self.mode == AppMode::Running
     }
 
+    fn draw(&self, terminal: &mut Terminal<impl Backend>) -> io::Result<()> {
+        terminal.draw(|frame| frame.render_widget(self, frame.size()))?;
+        Ok(())
+    }
+
     fn handle_events(&mut self) -> Result<()> {
+        use KeyCode::*;
         match event::read()? {
             Event::Key(key) if key.kind == KeyEventKind::Press => match key.code {
-                KeyCode::Char('q') | KeyCode::Esc => self.exit(),
-                KeyCode::Char('1') => self.swap_constraint(ConstraintName::Min),
-                KeyCode::Char('2') => self.swap_constraint(ConstraintName::Max),
-                KeyCode::Char('3') => self.swap_constraint(ConstraintName::Length),
-                KeyCode::Char('4') => self.swap_constraint(ConstraintName::Percentage),
-                KeyCode::Char('5') => self.swap_constraint(ConstraintName::Ratio),
-                KeyCode::Char('6') => self.swap_constraint(ConstraintName::Fill),
-                KeyCode::Char('+') => self.increment_spacing(),
-                KeyCode::Char('-') => self.decrement_spacing(),
-                KeyCode::Char('x') => self.delete_block(),
-                KeyCode::Char('a') => self.insert_block(),
-                KeyCode::Char('k') | KeyCode::Up => self.increment_value(),
-                KeyCode::Char('j') | KeyCode::Down => self.decrement_value(),
-                KeyCode::Char('h') | KeyCode::Left => self.prev_block(),
-                KeyCode::Char('l') | KeyCode::Right => self.next_block(),
+                Char('q') | Esc => self.exit(),
+                Char('1') => self.swap_constraint(ConstraintName::Min),
+                Char('2') => self.swap_constraint(ConstraintName::Max),
+                Char('3') => self.swap_constraint(ConstraintName::Length),
+                Char('4') => self.swap_constraint(ConstraintName::Percentage),
+                Char('5') => self.swap_constraint(ConstraintName::Ratio),
+                Char('6') => self.swap_constraint(ConstraintName::Fill),
+                Char('+') => self.increment_spacing(),
+                Char('-') => self.decrement_spacing(),
+                Char('x') => self.delete_block(),
+                Char('a') => self.insert_block(),
+                Char('k') | Up => self.increment_value(),
+                Char('j') | Down => self.decrement_value(),
+                Char('h') | Left => self.prev_block(),
+                Char('l') | Right => self.next_block(),
                 _ => {}
             },
             _ => {}
@@ -346,8 +352,13 @@ impl App {
     }
 
     fn render_user_constraints_legend(&self, area: Rect, buf: &mut Buffer) {
-        let constraints = self.constraints.iter().map(|_| Constraint::Fill(1));
-        let blocks = Layout::horizontal(constraints).split(area);
+        let blocks = Layout::horizontal(
+            self.constraints
+                .iter()
+                .map(|_| Constraint::Fill(1))
+                .collect_vec(),
+        )
+        .split(area);
 
         for (i, (area, constraint)) in blocks.iter().zip(self.constraints.iter()).enumerate() {
             let selected = self.selected_index == i;
@@ -603,4 +614,33 @@ impl ConstraintName {
             Self::Max => SKY.c700,
         }
     }
+}
+
+fn init_error_hooks() -> Result<()> {
+    let (panic, error) = HookBuilder::default().into_hooks();
+    let panic = panic.into_panic_hook();
+    let error = error.into_eyre_hook();
+    color_eyre::eyre::set_hook(Box::new(move |e| {
+        let _ = restore_terminal();
+        error(e)
+    }))?;
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = restore_terminal();
+        panic(info);
+    }));
+    Ok(())
+}
+
+fn init_terminal() -> Result<Terminal<impl Backend>> {
+    enable_raw_mode()?;
+    stdout().execute(EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout());
+    let terminal = Terminal::new(backend)?;
+    Ok(terminal)
+}
+
+fn restore_terminal() -> Result<()> {
+    disable_raw_mode()?;
+    stdout().execute(LeaveAlternateScreen)?;
+    Ok(())
 }

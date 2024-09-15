@@ -1,5 +1,5 @@
 use palette::{IntoColor, Okhsv, Srgb};
-use ratatui::{buffer::Buffer, layout::Rect, style::Color, widgets::Widget};
+use ratatui::prelude::*;
 
 /// A widget that renders a color swatch of RGB colors.
 ///
@@ -19,7 +19,7 @@ impl Widget for RgbSwatch {
                 let hue = xi as f32 * 360.0 / f32::from(area.width);
                 let fg = color_from_oklab(hue, Okhsv::max_saturation(), value_fg);
                 let bg = color_from_oklab(hue, Okhsv::max_saturation(), value_bg);
-                buf[(x, y)].set_char('▀').set_fg(fg).set_bg(bg);
+                buf.get_mut(x, y).set_char('▀').set_fg(fg).set_bg(bg);
             }
         }
     }

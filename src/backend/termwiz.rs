@@ -7,18 +7,20 @@
 
 use std::{error::Error, io};
 
+use termwiz::{
+    caps::Capabilities,
+    cell::{AttributeChange, Blink, CellAttributes, Intensity, Underline},
+    color::{AnsiColor, ColorAttribute, ColorSpec, LinearRgba, RgbColor, SrgbaTuple},
+    surface::{Change, CursorVisibility, Position},
+    terminal::{buffered::BufferedTerminal, ScreenSize, SystemTerminal, Terminal},
+};
+
 use crate::{
     backend::{Backend, WindowSize},
     buffer::Cell,
     layout::Size,
+    prelude::Rect,
     style::{Color, Modifier, Style},
-    termwiz::{
-        caps::Capabilities,
-        cell::{AttributeChange, Blink, CellAttributes, Intensity, Underline},
-        color::{AnsiColor, ColorAttribute, ColorSpec, LinearRgba, RgbColor, SrgbaTuple},
-        surface::{Change, CursorVisibility, Position},
-        terminal::{buffered::BufferedTerminal, ScreenSize, SystemTerminal, Terminal},
-    },
 };
 
 /// A [`Backend`] implementation that uses [Termwiz] to render to the terminal.
@@ -57,7 +59,7 @@ use crate::{
 /// [`Terminal`]: crate::terminal::Terminal
 /// [`BufferedTerminal`]: termwiz::terminal::buffered::BufferedTerminal
 /// [Termwiz]: https://crates.io/crates/termwiz
-/// [Examples]: https://github.com/ratatui/ratatui/tree/main/examples/README.md
+/// [Examples]: https://github.com/ratatui-org/ratatui/tree/main/examples/README.md
 pub struct TermwizBackend {
     buffered_terminal: BufferedTerminal<SystemTerminal>,
 }
@@ -191,16 +193,12 @@ impl Backend for TermwizBackend {
         Ok(())
     }
 
-    fn get_cursor_position(&mut self) -> io::Result<crate::layout::Position> {
+    fn get_cursor(&mut self) -> io::Result<(u16, u16)> {
         let (x, y) = self.buffered_terminal.cursor_position();
-        Ok((x as u16, y as u16).into())
+        Ok((x as u16, y as u16))
     }
 
-    fn set_cursor_position<P: Into<crate::layout::Position>>(
-        &mut self,
-        position: P,
-    ) -> io::Result<()> {
-        let crate::layout::Position { x, y } = position.into();
+    fn set_cursor(&mut self, x: u16, y: u16) -> io::Result<()> {
         self.buffered_terminal.add_change(Change::CursorPosition {
             x: Position::Absolute(x as usize),
             y: Position::Absolute(y as usize),
@@ -215,9 +213,9 @@ impl Backend for TermwizBackend {
         Ok(())
     }
 
-    fn size(&self) -> io::Result<Size> {
+    fn size(&self) -> io::Result<Rect> {
         let (cols, rows) = self.buffered_terminal.dimensions();
-        Ok(Size::new(u16_max(cols), u16_max(rows)))
+        Ok(Rect::new(0, 0, u16_max(cols), u16_max(rows)))
     }
 
     fn window_size(&mut self) -> io::Result<WindowSize> {

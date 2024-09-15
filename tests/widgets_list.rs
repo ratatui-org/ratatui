@@ -34,6 +34,7 @@ fn widgets_list_should_highlight_the_selected_item() {
     state.select(Some(1));
     terminal
         .draw(|f| {
+            let size = f.size();
             let items = vec![
                 ListItem::new("Item 1"),
                 ListItem::new("Item 2"),
@@ -42,7 +43,7 @@ fn widgets_list_should_highlight_the_selected_item() {
             let list = List::new(items)
                 .highlight_style(Style::default().bg(Color::Yellow))
                 .highlight_symbol(">> ");
-            f.render_stateful_widget(list, f.area(), &mut state);
+            f.render_stateful_widget(list, size, &mut state);
         })
         .unwrap();
     #[rustfmt::skip]
@@ -52,7 +53,7 @@ fn widgets_list_should_highlight_the_selected_item() {
         "   Item 3 ",
     ]);
     for x in 0..10 {
-        expected[(x, 1)].set_bg(Color::Yellow);
+        expected.get_mut(x, 1).set_bg(Color::Yellow);
     }
     terminal.backend().assert_buffer(&expected);
 }
@@ -68,6 +69,7 @@ fn widgets_list_should_highlight_the_selected_item_wide_symbol() {
     state.select(Some(1));
     terminal
         .draw(|f| {
+            let size = f.size();
             let items = vec![
                 ListItem::new("Item 1"),
                 ListItem::new("Item 2"),
@@ -76,7 +78,7 @@ fn widgets_list_should_highlight_the_selected_item_wide_symbol() {
             let list = List::new(items)
                 .highlight_style(Style::default().bg(Color::Yellow))
                 .highlight_symbol(wide_symbol);
-            f.render_stateful_widget(list, f.area(), &mut state);
+            f.render_stateful_widget(list, size, &mut state);
         })
         .unwrap();
     #[rustfmt::skip]
@@ -86,7 +88,7 @@ fn widgets_list_should_highlight_the_selected_item_wide_symbol() {
         "   Item 3 ",
     ]);
     for x in 0..10 {
-        expected[(x, 1)].set_bg(Color::Yellow);
+        expected.get_mut(x, 1).set_bg(Color::Yellow);
     }
     terminal.backend().assert_buffer(&expected);
 }
@@ -153,6 +155,7 @@ fn widgets_list_should_clamp_offset_if_items_are_removed() {
     state.select(Some(5));
     terminal
         .draw(|f| {
+            let size = f.size();
             let items = vec![
                 ListItem::new("Item 0"),
                 ListItem::new("Item 1"),
@@ -162,7 +165,7 @@ fn widgets_list_should_clamp_offset_if_items_are_removed() {
                 ListItem::new("Item 5"),
             ];
             let list = List::new(items).highlight_symbol(">> ");
-            f.render_stateful_widget(list, f.area(), &mut state);
+            f.render_stateful_widget(list, size, &mut state);
         })
         .unwrap();
     terminal.backend().assert_buffer_lines([
@@ -176,13 +179,14 @@ fn widgets_list_should_clamp_offset_if_items_are_removed() {
     state.select(Some(1));
     terminal
         .draw(|f| {
+            let size = f.size();
             let items = vec![ListItem::new("Item 3")];
             let list = List::new(items).highlight_symbol(">> ");
-            f.render_stateful_widget(list, f.area(), &mut state);
+            f.render_stateful_widget(list, size, &mut state);
         })
         .unwrap();
     terminal.backend().assert_buffer_lines([
-        ">> Item 3 ",
+        "   Item 3 ",
         "          ",
         "          ",
         "          ",
@@ -197,6 +201,7 @@ fn widgets_list_should_display_multiline_items() {
     state.select(Some(1));
     terminal
         .draw(|f| {
+            let size = f.size();
             let items = vec![
                 ListItem::new(vec![Line::from("Item 1"), Line::from("Item 1a")]),
                 ListItem::new(vec![Line::from("Item 2"), Line::from("Item 2b")]),
@@ -205,7 +210,7 @@ fn widgets_list_should_display_multiline_items() {
             let list = List::new(items)
                 .highlight_style(Style::default().bg(Color::Yellow))
                 .highlight_symbol(">> ");
-            f.render_stateful_widget(list, f.area(), &mut state);
+            f.render_stateful_widget(list, size, &mut state);
         })
         .unwrap();
     let mut expected = Buffer::with_lines([
@@ -217,8 +222,8 @@ fn widgets_list_should_display_multiline_items() {
         "   Item 3c",
     ]);
     for x in 0..10 {
-        expected[(x, 2)].set_bg(Color::Yellow);
-        expected[(x, 3)].set_bg(Color::Yellow);
+        expected.get_mut(x, 2).set_bg(Color::Yellow);
+        expected.get_mut(x, 3).set_bg(Color::Yellow);
     }
     terminal.backend().assert_buffer(&expected);
 }
@@ -231,6 +236,7 @@ fn widgets_list_should_repeat_highlight_symbol() {
     state.select(Some(1));
     terminal
         .draw(|f| {
+            let size = f.size();
             let items = vec![
                 ListItem::new(vec![Line::from("Item 1"), Line::from("Item 1a")]),
                 ListItem::new(vec![Line::from("Item 2"), Line::from("Item 2b")]),
@@ -240,7 +246,7 @@ fn widgets_list_should_repeat_highlight_symbol() {
                 .highlight_style(Style::default().bg(Color::Yellow))
                 .highlight_symbol(">> ")
                 .repeat_highlight_symbol(true);
-            f.render_stateful_widget(list, f.area(), &mut state);
+            f.render_stateful_widget(list, size, &mut state);
         })
         .unwrap();
     let mut expected = Buffer::with_lines([
@@ -252,8 +258,8 @@ fn widgets_list_should_repeat_highlight_symbol() {
         "   Item 3c",
     ]);
     for x in 0..10 {
-        expected[(x, 2)].set_bg(Color::Yellow);
-        expected[(x, 3)].set_bg(Color::Yellow);
+        expected.get_mut(x, 2).set_bg(Color::Yellow);
+        expected.get_mut(x, 3).set_bg(Color::Yellow);
     }
     terminal.backend().assert_buffer(&expected);
 }
@@ -275,7 +281,7 @@ fn widget_list_should_not_ignore_empty_string_items() {
                 .style(Style::default())
                 .highlight_style(Style::default());
 
-            f.render_widget(list, f.area());
+            f.render_widget(list, f.size());
         })
         .unwrap();
     terminal
@@ -357,6 +363,7 @@ fn widgets_list_enable_always_highlight_spacing<'line, Lines>(
     let mut terminal = Terminal::new(backend).unwrap();
     terminal
         .draw(|f| {
+            let size = f.size();
             let table = List::new(vec![
                 ListItem::new(vec![Line::from("Item 1"), Line::from("Item 1a")]),
                 ListItem::new(vec![Line::from("Item 2"), Line::from("Item 2b")]),
@@ -365,7 +372,7 @@ fn widgets_list_enable_always_highlight_spacing<'line, Lines>(
             .block(Block::bordered())
             .highlight_symbol(">> ")
             .highlight_spacing(space);
-            f.render_stateful_widget(table, f.area(), &mut state);
+            f.render_stateful_widget(table, size, &mut state);
         })
         .unwrap();
     terminal

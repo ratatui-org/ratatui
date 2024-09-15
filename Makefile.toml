@@ -5,17 +5,24 @@ skip_core_tasks = true
 
 [env]
 # all features except the backend ones
-NON_BACKEND_FEATURES = "all-widgets,macros,serde"
+ALL_FEATURES = "all-widgets,macros,serde"
+
+[env.ALL_FEATURES_FLAG]
+# Windows does not support building termion, so this avoids the build failure by providing two
+# sets of flags, one for Windows and one for other platforms.
+source = "${CARGO_MAKE_RUST_TARGET_OS}"
+default_value = "--features=all-widgets,macros,serde,crossterm,termion,termwiz,underline-color,unstable"
+mapping = { "windows" = "--features=all-widgets,macros,serde,crossterm,termwiz,underline-color,unstable" }
 
 [tasks.default]
 alias = "ci"
 
 [tasks.ci]
 description = "Run continuous integration tasks"
-dependencies = ["lint", "clippy", "check", "test"]
+dependencies = ["lint-style", "clippy", "check", "test"]
 
-[tasks.lint]
-description = "Lint code style (formatting, typos, docs, markdown)"
+[tasks.lint-style]
+description = "Lint code style (formatting, typos, docs)"
 dependencies = ["lint-format", "lint-typos", "lint-docs"]
 
 [tasks.lint-format]
@@ -41,27 +48,33 @@ toolchain = "nightly"
 command = "cargo"
 args = [
   "rustdoc",
-  "--all-features",
+  "--no-default-features",
+  "${ALL_FEATURES_FLAG}",
   "--",
   "-Zunstable-options",
   "--check",
   "-Dwarnings",
 ]
 
-[tasks.lint-markdown]
-description = "Check markdown files for errors and warnings"
-command = "markdownlint-cli2"
-args = ["**/*.md", "!target"]
-
 [tasks.check]
 description = "Check code for errors and warnings"
 command = "cargo"
-args = ["check", "--all-targets", "--all-features"]
+args = [
+  "check",
+  "--all-targets",
+  "--no-default-features",
+  "${ALL_FEATURES_FLAG}",
+]
 
 [tasks.build]
 description = "Compile the project"
 command = "cargo"
-args = ["build", "--all-targets", "--all-features"]
+args = [
+  "build",
+  "--all-targets",
+  "--no-default-features",
+  "${ALL_FEATURES_FLAG}",
+]
 
 [tasks.clippy]
 description = "Run Clippy for linting"
@@ -69,9 +82,10 @@ command = "cargo"
 args = [
   "clippy",
   "--all-targets",
-  "--all-features",
   "--tests",
   "--benches",
+  "--no-default-features",
+  "${ALL_FEATURES_FLAG}",
   "--",
   "-D",
   "warnings",
@@ -89,12 +103,18 @@ run_task = { name = ["test-lib", "test-doc"] }
 description = "Run default tests"
 dependencies = ["install-nextest"]
 command = "cargo"
-args = ["nextest", "run", "--all-targets", "--all-features"]
+args = [
+  "nextest",
+  "run",
+  "--all-targets",
+  "--no-default-features",
+  "${ALL_FEATURES_FLAG}",
+]
 
 [tasks.test-doc]
 description = "Run documentation tests"
 command = "cargo"
-args = ["test", "--doc", "--all-features"]
+args = ["test", "--doc", "--no-default-features", "${ALL_FEATURES_FLAG}"]
 
 [tasks.test-backend]
 # takes a command line parameter to specify the backend to test (e.g. "crossterm")
@@ -107,7 +127,7 @@ args = [
   "--all-targets",
   "--no-default-features",
   "--features",
-  "${NON_BACKEND_FEATURES},${@}",
+  "${ALL_FEATURES},${@}",
 ]
 
 [tasks.coverage]
@@ -118,7 +138,8 @@ args = [
   "--lcov",
   "--output-path",
   "target/lcov.info",
-  "--all-features",
+  "--no-default-features",
+  "${ALL_FEATURES_FLAG}",
 ]
 
 [tasks.run-example]

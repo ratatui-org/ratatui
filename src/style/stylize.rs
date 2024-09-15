@@ -133,13 +133,13 @@ macro_rules! modifier {
 ///     "world".green().on_yellow().not_bold(),
 /// ]);
 /// let paragraph = Paragraph::new(line).italic().underlined();
-/// let block = Block::bordered().title("Title").on_white().bold();
+/// let block = Block::bordered().title_top("Title").on_white().bold();
 /// ```
 pub trait Stylize<'a, T>: Sized {
     #[must_use = "`bg` returns the modified style without modifying the original"]
-    fn bg<C: Into<Color>>(self, color: C) -> T;
+    fn bg(self, color: Color) -> T;
     #[must_use = "`fg` returns the modified style without modifying the original"]
-    fn fg<C: Into<Color>>(self, color: C) -> T;
+    fn fg<S: Into<Color>>(self, color: S) -> T;
     #[must_use = "`reset` returns the modified style without modifying the original"]
     fn reset(self) -> T;
     #[must_use = "`add_modifier` returns the modified style without modifying the original"]
@@ -179,12 +179,12 @@ impl<'a, T, U> Stylize<'a, T> for U
 where
     U: Styled<Item = T>,
 {
-    fn bg<C: Into<Color>>(self, color: C) -> T {
-        let style = self.style().bg(color.into());
+    fn bg(self, color: Color) -> T {
+        let style = self.style().bg(color);
         self.set_style(style)
     }
 
-    fn fg<C: Into<Color>>(self, color: C) -> T {
+    fn fg<S: Into<Color>>(self, color: S) -> T {
         let style = self.style().fg(color.into());
         self.set_style(style)
     }
@@ -346,7 +346,7 @@ mod tests {
         // issue as above without the `Styled` trait impl for `String`
         let items = [String::from("a"), String::from("b")];
         let sss = items.iter().map(|s| format!("{s}{s}").red()).collect_vec();
-        assert_eq!(sss, [Span::from("aa").red(), Span::from("bb").red()]);
+        assert_eq!(sss, vec![Span::from("aa").red(), Span::from("bb").red()]);
     }
 
     #[test]

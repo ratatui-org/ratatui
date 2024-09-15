@@ -9,145 +9,155 @@
 //! See the [examples readme] for more information on finding examples that match the version of the
 //! library you are using.
 //!
-//! [Ratatui]: https://github.com/ratatui/ratatui
-//! [examples]: https://github.com/ratatui/ratatui/blob/main/examples
-//! [examples readme]: https://github.com/ratatui/ratatui/blob/main/examples/README.md
+//! [Ratatui]: https://github.com/ratatui-org/ratatui
+//! [examples]: https://github.com/ratatui-org/ratatui/blob/main/examples
+//! [examples readme]: https://github.com/ratatui-org/ratatui/blob/main/examples/README.md
 
 use std::{
-    io::{self},
+    error::Error,
+    io,
     time::{Duration, Instant},
 };
 
-use color_eyre::Result;
+use crossterm::{
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
 use ratatui::{
-    buffer::Buffer,
-    crossterm::event::{self, Event, KeyCode, KeyEventKind},
-    layout::{Constraint, Layout, Rect},
-    style::{Color, Stylize},
-    text::{Line, Masked, Span},
-    widgets::{Block, Paragraph, Widget, Wrap},
-    DefaultTerminal,
+    prelude::*,
+    widgets::{Block, Paragraph, Wrap},
 };
 
-fn main() -> Result<()> {
-    color_eyre::install()?;
-    let terminal = ratatui::init();
-    let app_result = App::new().run(terminal);
-    ratatui::restore();
-    app_result
-}
-
-#[derive(Debug)]
 struct App {
-    should_exit: bool,
     scroll: u16,
-    last_tick: Instant,
 }
 
 impl App {
-    /// The duration between each tick.
-    const TICK_RATE: Duration = Duration::from_millis(250);
-
-    /// Create a new instance of the app.
-    fn new() -> Self {
-        Self {
-            should_exit: false,
-            scroll: 0,
-            last_tick: Instant::now(),
-        }
+    const fn new() -> Self {
+        Self { scroll: 0 }
     }
 
-    /// Run the app until the user exits.
-    fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
-        while !self.should_exit {
-            terminal.draw(|frame| frame.render_widget(&self, frame.area()))?;
-            self.handle_events()?;
-            if self.last_tick.elapsed() >= Self::TICK_RATE {
-                self.on_tick();
-                self.last_tick = Instant::now();
-            }
-        }
-        Ok(())
+    fn on_tick(&mut self) {
+        self.scroll += 1;
+        self.scroll %= 10;
+    }
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    // setup terminal
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    // create app and run it
+    let tick_rate = Duration::from_millis(250);
+    let app = App::new();
+    let res = run_app(&mut terminal, app, tick_rate);
+
+    // restore terminal
+    disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
+    terminal.show_cursor()?;
+
+    if let Err(err) = res {
+        println!("{err:?}");
     }
 
-    /// Handle events from the terminal.
-    fn handle_events(&mut self) -> io::Result<()> {
-        let timeout = Self::TICK_RATE.saturating_sub(self.last_tick.elapsed());
-        while event::poll(timeout)? {
+    Ok(())
+}
+
+fn run_app<B: Backend>(
+    terminal: &mut Terminal<B>,
+    mut app: App,
+    tick_rate: Duration,
+) -> io::Result<()> {
+    let mut last_tick = Instant::now();
+    loop {
+        terminal.draw(|f| ui(f, &app))?;
+
+        let timeout = tick_rate.saturating_sub(last_tick.elapsed());
+        if crossterm::event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press && key.code == KeyCode::Char('q') {
-                    self.should_exit = true;
+                if key.code == KeyCode::Char('q') {
+                    return Ok(());
                 }
             }
         }
-        Ok(())
-    }
-
-    /// Update the app state on each tick.
-    fn on_tick(&mut self) {
-        self.scroll = (self.scroll + 1) % 10;
+        if last_tick.elapsed() >= tick_rate {
+            app.on_tick();
+            last_tick = Instant::now();
+        }
     }
 }
 
-impl Widget for &App {
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        let areas = Layout::vertical([Constraint::Max(9); 4]).split(area);
-        Paragraph::new(create_lines(area))
-            .block(title_block("Default alignment (Left), no wrap"))
-            .gray()
-            .render(areas[0], buf);
-        Paragraph::new(create_lines(area))
-            .block(title_block("Default alignment (Left), with wrap"))
-            .gray()
-            .wrap(Wrap { trim: true })
-            .render(areas[1], buf);
-        Paragraph::new(create_lines(area))
-            .block(title_block("Right alignment, with wrap"))
-            .gray()
-            .right_aligned()
-            .wrap(Wrap { trim: true })
-            .render(areas[2], buf);
-        Paragraph::new(create_lines(area))
-            .block(title_block("Center alignment, with wrap, with scroll"))
-            .gray()
-            .centered()
-            .wrap(Wrap { trim: true })
-            .scroll((self.scroll, 0))
-            .render(areas[3], buf);
-    }
-}
+fn ui(f: &mut Frame, app: &App) {
+    let size = f.size();
 
-/// Create a bordered block with a title.
-fn title_block(title: &str) -> Block {
-    Block::bordered()
-        .gray()
-        .title(title.bold().into_centered_line())
-}
+    // Words made "loooong" to demonstrate line breaking.
+    let s = "Veeeeeeeeeeeeeeeery    loooooooooooooooooong   striiiiiiiiiiiiiiiiiiiiiiiiiing.   ";
+    let mut long_line = s.repeat(usize::from(size.width) / s.len() + 4);
+    long_line.push('\n');
 
-/// Create some lines to display in the paragraph.
-fn create_lines(area: Rect) -> Vec<Line<'static>> {
-    let short_line = "A long line to demonstrate line wrapping. ";
-    let long_line = short_line.repeat(usize::from(area.width) / short_line.len() + 4);
-    let mut styled_spans = vec![];
-    for span in [
-        "Styled".blue(),
-        "Spans".red().on_white(),
-        "Bold".bold(),
-        "Italic".italic(),
-        "Underlined".underlined(),
-        "Strikethrough".crossed_out(),
-    ] {
-        styled_spans.push(span);
-        styled_spans.push(" ".into());
-    }
-    vec![
-        Line::raw("Unstyled Line"),
-        Line::raw("Styled Line").black().on_red().bold().italic(),
-        Line::from(styled_spans),
-        Line::from(long_line.green().italic()),
-        Line::from_iter([
+    let block = Block::new().black();
+    f.render_widget(block, size);
+
+    let layout = Layout::vertical([Constraint::Ratio(1, 4); 4]).split(size);
+
+    let text = vec![
+        Line::from("This is a line "),
+        Line::from("This is a line   ".red()),
+        Line::from("This is a line".on_blue()),
+        Line::from("This is a longer line".crossed_out()),
+        Line::from(long_line.on_green()),
+        Line::from("This is a line".green().italic()),
+        Line::from(vec![
             "Masked text: ".into(),
-            Span::styled(Masked::new("my secret password", '*'), Color::Red),
+            Span::styled(
+                Masked::new("password", '*'),
+                Style::default().fg(Color::Red),
+            ),
         ]),
-    ]
+    ];
+
+    let create_block = |title| {
+        Block::bordered()
+            .style(Style::default().fg(Color::Gray))
+            .title_top(Span::styled(
+                title,
+                Style::default().add_modifier(Modifier::BOLD),
+            ))
+    };
+
+    let paragraph = Paragraph::new(text.clone())
+        .style(Style::default().fg(Color::Gray))
+        .block(create_block("Default alignment (Left), no wrap"));
+    f.render_widget(paragraph, layout[0]);
+
+    let paragraph = Paragraph::new(text.clone())
+        .style(Style::default().fg(Color::Gray))
+        .block(create_block("Default alignment (Left), with wrap"))
+        .wrap(Wrap { trim: true });
+    f.render_widget(paragraph, layout[1]);
+
+    let paragraph = Paragraph::new(text.clone())
+        .style(Style::default().fg(Color::Gray))
+        .block(create_block("Right alignment, with wrap"))
+        .right_aligned()
+        .wrap(Wrap { trim: true });
+    f.render_widget(paragraph, layout[2]);
+
+    let paragraph = Paragraph::new(text)
+        .style(Style::default().fg(Color::Gray))
+        .block(create_block("Center alignment, with wrap, with scroll"))
+        .centered()
+        .wrap(Wrap { trim: true })
+        .scroll((app.scroll, 0));
+    f.render_widget(paragraph, layout[3]);
 }

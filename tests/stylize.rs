@@ -39,21 +39,21 @@ fn barchart_can_be_stylized() {
     for y in area.y..area.height {
         // background
         for x in area.x..area.width {
-            expected[(x, y)].set_bg(Color::White);
+            expected.get_mut(x, y).set_bg(Color::White);
         }
         // bars
         for x in [0, 1, 3, 4, 6, 7] {
-            expected[(x, y)].set_fg(Color::Red);
+            expected.get_mut(x, y).set_fg(Color::Red);
         }
     }
     // values
     for x in 0..3 {
-        expected[(x * 3, 3)].set_fg(Color::Green);
+        expected.get_mut(x * 3, 3).set_fg(Color::Green);
     }
     // labels
     for x in 0..3 {
-        expected[(x * 3, 4)].set_fg(Color::Blue);
-        expected[(x * 3 + 1, 4)].set_fg(Color::Reset);
+        expected.get_mut(x * 3, 4).set_fg(Color::Blue);
+        expected.get_mut(x * 3 + 1, 4).set_fg(Color::Reset);
     }
     terminal.backend().assert_buffer(&expected);
 }
@@ -61,7 +61,7 @@ fn barchart_can_be_stylized() {
 #[test]
 fn block_can_be_stylized() -> io::Result<()> {
     let block = Block::bordered()
-        .title("Title".light_blue())
+        .title_top("Title".light_blue())
         .on_cyan()
         .cyan();
 
@@ -80,11 +80,14 @@ fn block_can_be_stylized() -> io::Result<()> {
     ]);
     for x in area.x..area.width {
         for y in area.y..area.height {
-            expected[(x, y)].set_fg(Color::Cyan).set_bg(Color::Cyan);
+            expected
+                .get_mut(x, y)
+                .set_fg(Color::Cyan)
+                .set_bg(Color::Cyan);
         }
     }
     for x in 1..=5 {
-        expected[(x, 0)].set_fg(Color::LightBlue);
+        expected.get_mut(x, 0).set_fg(Color::LightBlue);
     }
     terminal.backend().assert_buffer(&expected);
     Ok(())
@@ -102,7 +105,7 @@ fn paragraph_can_be_stylized() -> io::Result<()> {
 
     let mut expected = Buffer::with_lines(["Text      "]);
     for x in 0..4 {
-        expected[(x, 0)].set_fg(Color::Cyan);
+        expected.get_mut(x, 0).set_fg(Color::Cyan);
     }
     terminal.backend().assert_buffer(&expected);
     Ok(())

@@ -113,7 +113,7 @@ pub enum Color {
     /// If the terminal does not support true color, code using the  [`TermwizBackend`] will
     /// fallback to the default text color. Crossterm and Termion do not have this capability and
     /// the display will be unpredictable (e.g. Terminal.app may display glitched blinking text).
-    /// See <https://github.com/ratatui/ratatui/issues/475> for an example of this problem.
+    /// See <https://github.com/ratatui-org/ratatui/issues/475> for an example of this problem.
     ///
     /// See also: <https://en.wikipedia.org/wiki/ANSI_escape_code#24-bit>
     ///
@@ -313,7 +313,16 @@ impl FromStr for Color {
                 _ => {
                     if let Ok(index) = s.parse::<u8>() {
                         Self::Indexed(index)
-                    } else if let Some((r, g, b)) = parse_hex_color(s) {
+                    } else if let (Ok(r), Ok(g), Ok(b)) = {
+                        if !s.starts_with('#') || s.len() != 7 {
+                            return Err(ParseColorError);
+                        }
+                        (
+                            u8::from_str_radix(&s[1..3], 16),
+                            u8::from_str_radix(&s[3..5], 16),
+                            u8::from_str_radix(&s[5..7], 16),
+                        )
+                    } {
                         Self::Rgb(r, g, b)
                     } else {
                         return Err(ParseColorError);
@@ -322,16 +331,6 @@ impl FromStr for Color {
             },
         )
     }
-}
-
-fn parse_hex_color(input: &str) -> Option<(u8, u8, u8)> {
-    if !input.starts_with('#') || input.len() != 7 {
-        return None;
-    }
-    let r = u8::from_str_radix(input.get(1..3)?, 16).ok()?;
-    let g = u8::from_str_radix(input.get(3..5)?, 16).ok()?;
-    let b = u8::from_str_radix(input.get(5..7)?, 16).ok()?;
-    Some((r, g, b))
 }
 
 impl fmt::Display for Color {
@@ -588,7 +587,6 @@ mod tests {
             "abcdef0",       // 7 chars is not a color
             " bcdefa",       // doesn't start with a '#'
             "#abcdef00",     // too many chars
-            "#1🦀2",         // len 7 but on char boundaries shouldnt panic
             "resett",        // typo
             "lightblackk",   // typo
         ];

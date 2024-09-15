@@ -1,14 +1,5 @@
 use itertools::Itertools;
-use ratatui::{
-    buffer::Buffer,
-    layout::{Constraint, Layout, Margin, Rect},
-    style::{Styled, Stylize},
-    text::Line,
-    widgets::{
-        Block, BorderType, Borders, Clear, List, ListItem, ListState, Padding, Paragraph,
-        Scrollbar, ScrollbarState, StatefulWidget, Tabs, Widget,
-    },
-};
+use ratatui::{prelude::*, widgets::*};
 use unicode_width::UnicodeWidthStr;
 
 use crate::{RgbSwatch, THEME};
@@ -68,7 +59,7 @@ impl EmailTab {
 impl Widget for EmailTab {
     fn render(self, area: Rect, buf: &mut Buffer) {
         RgbSwatch.render(area, buf);
-        let area = area.inner(Margin {
+        let area = area.inner(&Margin {
             vertical: 1,
             horizontal: 2,
         });
@@ -96,10 +87,13 @@ fn render_inbox(selected_index: usize, area: Rect, buf: &mut Buffer) {
         .map(|e| e.from.width())
         .max()
         .unwrap_or_default();
-    let items = EMAILS.iter().map(|e| {
-        let from = format!("{:width$}", e.from, width = from_width).into();
-        ListItem::new(Line::from(vec![from, " ".into(), e.subject.into()]))
-    });
+    let items = EMAILS
+        .iter()
+        .map(|e| {
+            let from = format!("{:width$}", e.from, width = from_width).into();
+            ListItem::new(Line::from(vec![from, " ".into(), e.subject.into()]))
+        })
+        .collect_vec();
     let mut state = ListState::default().with_selected(Some(selected_index));
     StatefulWidget::render(
         List::new(items)

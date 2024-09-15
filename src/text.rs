@@ -5,7 +5,7 @@
 //! - A single line string where all graphemes have the same style is represented by a [`Span`].
 //! - A single line string where each grapheme may have its own style is represented by [`Line`].
 //! - A multiple line string where each grapheme may have its own style is represented by a
-//!   [`Text`].
+//! [`Text`].
 //!
 //! These types form a hierarchy: [`Line`] is a collection of [`Span`] and each line of [`Text`]
 //! is a [`Line`].
@@ -25,20 +25,21 @@
 //! // Converted to Line(vec![
 //! //   Span { content: Cow::Borrowed("My title"), style: Style { .. } }
 //! // ])
-//! let block = Block::new().title("My title");
+//! let block = Block::new().title_top("My title");
 //!
 //! // A simple string with a unique style.
 //! // Converted to Line(vec![
 //! //   Span { content: Cow::Borrowed("My title"), style: Style { fg: Some(Color::Yellow), .. }
 //! // ])
-//! let block = Block::new().title(Span::styled("My title", Style::default().fg(Color::Yellow)));
+//! let block =
+//!     Block::new().title_top(Span::styled("My title", Style::default().fg(Color::Yellow)));
 //!
 //! // A string with multiple styles.
 //! // Converted to Line(vec![
 //! //   Span { content: Cow::Borrowed("My"), style: Style { fg: Some(Color::Yellow), .. } },
 //! //   Span { content: Cow::Borrowed(" title"), .. }
 //! // ])
-//! let block = Block::new().title(vec![
+//! let block = Block::new().title_top(vec![
 //!     Span::styled("My", Style::default().fg(Color::Yellow)),
 //!     Span::raw(" title"),
 //! ]);
@@ -48,13 +49,14 @@ mod grapheme;
 pub use grapheme::StyledGrapheme;
 
 mod line;
-pub use line::{Line, ToLine};
+pub use line::Line;
 
 mod masked;
 pub use masked::Masked;
 
 mod span;
-pub use span::{Span, ToSpan};
+pub use span::Span;
 
+#[allow(clippy::module_inception)]
 mod text;
-pub use text::{Text, ToText};
+pub use text::Text;

@@ -2,7 +2,7 @@ use std::cmp::min;
 
 use strum::{Display, EnumString};
 
-use crate::{prelude::*, style::Styled, widgets::Block};
+use crate::{prelude::*, widgets::Block};
 
 /// Widget to render a sparkline over one or more lines.
 ///
@@ -24,13 +24,13 @@ use crate::{prelude::*, style::Styled, widgets::Block};
 /// use ratatui::{prelude::*, widgets::*};
 ///
 /// Sparkline::default()
-///     .block(Block::bordered().title("Sparkline"))
+///     .block(Block::bordered().title_top("Sparkline"))
 ///     .data(&[0, 2, 3, 4, 1, 4, 10])
 ///     .max(5)
 ///     .direction(RenderDirection::RightToLeft)
 ///     .style(Style::default().red().on_white());
 /// ```
-#[derive(Debug, Default, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Sparkline<'a> {
     /// A block to wrap the widget in
     block: Option<Block<'a>>,
@@ -57,6 +57,19 @@ pub enum RenderDirection {
     LeftToRight,
     /// The first value is on the right, going to the left
     RightToLeft,
+}
+
+impl<'a> Default for Sparkline<'a> {
+    fn default() -> Self {
+        Self {
+            block: None,
+            style: Style::default(),
+            data: &[],
+            max: None,
+            bar_set: symbols::bar::NINE_LEVELS,
+            direction: RenderDirection::LeftToRight,
+        }
+    }
 }
 
 impl<'a> Sparkline<'a> {
@@ -159,9 +172,10 @@ impl Sparkline<'_> {
             return;
         }
 
-        let max = self
-            .max
-            .unwrap_or_else(|| *self.data.iter().max().unwrap_or(&1));
+        let max = match self.max {
+            Some(v) => v,
+            None => *self.data.iter().max().unwrap_or(&1),
+        };
         let max_index = min(spark_area.width as usize, self.data.len());
         let mut data = self
             .data
@@ -192,7 +206,7 @@ impl Sparkline<'_> {
                     RenderDirection::LeftToRight => spark_area.left() + i as u16,
                     RenderDirection::RightToLeft => spark_area.right() - i as u16 - 1,
                 };
-                buf[(x, spark_area.top() + j)]
+                buf.get_mut(x, spark_area.top() + j)
                     .set_symbol(symbol)
                     .set_style(self.style);
 
@@ -237,9 +251,11 @@ mod tests {
 
     // Helper function to render a sparkline to a buffer with a given width
     // filled with x symbols to make it easier to assert on the result
-    fn render(widget: Sparkline<'_>, width: u16) -> Buffer {
+    fn render(widget: Sparkline, width: u16) -> Buffer {
         let area = Rect::new(0, 0, width, 1);
-        let mut buffer = Buffer::filled(area, Cell::new("x"));
+        let mut cell = Cell::default();
+        cell.set_symbol("x");
+        let mut buffer = Buffer::filled(area, &cell);
         widget.render(area, &mut buffer);
         buffer
     }
@@ -253,8 +269,6 @@ mod tests {
 
     #[test]
     fn it_does_not_panic_if_max_is_set_to_zero() {
-        // see https://github.com/rust-lang/rust-clippy/issues/13191
-        #[allow(clippy::unnecessary_min_or_max)]
         let widget = Sparkline::default().data(&[0, 1, 2]).max(0);
         let buffer = render(widget, 6);
         assert_eq!(buffer, Buffer::with_lines(["   xxx"]));

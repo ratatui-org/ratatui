@@ -13,13 +13,14 @@ fn widgets_barchart_not_full_below_max_value() {
     let mut terminal = Terminal::new(backend).unwrap();
     terminal
         .draw(|f| {
+            let size = f.size();
             let barchart = BarChart::default()
                 .block(Block::bordered())
                 .data(&[("empty", 0), ("half", 50), ("almost", 99), ("full", 100)])
                 .max(100)
                 .bar_width(7)
                 .bar_gap(0);
-            f.render_widget(barchart, f.area());
+            f.render_widget(barchart, size);
         })
         .unwrap();
     terminal.backend().assert_buffer_lines([
@@ -43,6 +44,7 @@ fn widgets_barchart_group() {
     let mut terminal = Terminal::new(backend).unwrap();
     terminal
         .draw(|f| {
+            let size = f.size();
             let barchart = BarChart::default()
                 .block(Block::bordered())
                 .data(
@@ -64,7 +66,7 @@ fn widgets_barchart_group() {
                 .group_gap(2)
                 .bar_width(4)
                 .bar_gap(1);
-            f.render_widget(barchart, f.area());
+            f.render_widget(barchart, size);
         })
         .unwrap();
 
@@ -83,11 +85,11 @@ fn widgets_barchart_group() {
     ]);
     for y in 1..(TERMINAL_HEIGHT - 3) {
         for x in 1..5 {
-            expected[(x, y)].set_fg(Color::Red);
-            expected[(x + 5, y)].set_fg(Color::Green);
+            expected.get_mut(x, y).set_fg(Color::Red);
+            expected.get_mut(x + 5, y).set_fg(Color::Green);
         }
     }
-    expected[(2, 7)].set_fg(Color::Blue);
-    expected[(3, 7)].set_fg(Color::Blue);
+    expected.get_mut(2, 7).set_fg(Color::Blue);
+    expected.get_mut(3, 7).set_fg(Color::Blue);
     terminal.backend().assert_buffer(&expected);
 }

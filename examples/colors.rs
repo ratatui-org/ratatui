@@ -9,50 +9,64 @@
 //! See the [examples readme] for more information on finding examples that match the version of the
 //! library you are using.
 //!
-//! [Ratatui]: https://github.com/ratatui/ratatui
-//! [examples]: https://github.com/ratatui/ratatui/blob/main/examples
-//! [examples readme]: https://github.com/ratatui/ratatui/blob/main/examples/README.md
+//! [Ratatui]: https://github.com/ratatui-org/ratatui
+//! [examples]: https://github.com/ratatui-org/ratatui/blob/main/examples
+//! [examples readme]: https://github.com/ratatui-org/ratatui/blob/main/examples/README.md
 
 // This example shows all the colors supported by ratatui. It will render a grid of foreground
 // and background colors with their names and indexes.
 
-use color_eyre::Result;
-use itertools::Itertools;
-use ratatui::{
-    crossterm::event::{self, Event, KeyCode, KeyEventKind},
-    layout::{Alignment, Constraint, Layout, Rect},
-    style::{Color, Style, Stylize},
-    text::Line,
-    widgets::{Block, Borders, Paragraph},
-    DefaultTerminal, Frame,
+use std::{
+    error::Error,
+    io::{self, Stdout},
+    result,
+    time::Duration,
 };
 
+use crossterm::{
+    event::{self, Event, KeyCode},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use itertools::Itertools;
+use ratatui::{
+    prelude::*,
+    widgets::{Block, Borders, Paragraph},
+};
+
+type Result<T> = result::Result<T, Box<dyn Error>>;
+
 fn main() -> Result<()> {
-    color_eyre::install()?;
-    let terminal = ratatui::init();
-    let app_result = run(terminal);
-    ratatui::restore();
-    app_result
+    let mut terminal = setup_terminal()?;
+    let res = run_app(&mut terminal);
+    restore_terminal(terminal)?;
+    if let Err(err) = res {
+        eprintln!("{err:?}");
+    }
+    Ok(())
 }
 
-fn run(mut terminal: DefaultTerminal) -> Result<()> {
+fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> io::Result<()> {
     loop {
-        terminal.draw(draw)?;
-        if let Event::Key(key) = event::read()? {
-            if key.kind == KeyEventKind::Press && key.code == KeyCode::Char('q') {
-                return Ok(());
+        terminal.draw(ui)?;
+
+        if event::poll(Duration::from_millis(250))? {
+            if let Event::Key(key) = event::read()? {
+                if key.code == KeyCode::Char('q') {
+                    return Ok(());
+                }
             }
         }
     }
 }
 
-fn draw(frame: &mut Frame) {
+fn ui(frame: &mut Frame) {
     let layout = Layout::vertical([
         Constraint::Length(30),
         Constraint::Length(17),
         Constraint::Length(2),
     ])
-    .split(frame.area());
+    .split(frame.size());
 
     render_named_colors(frame, layout[0]);
     render_indexed_colors(frame, layout[1]);
@@ -99,16 +113,19 @@ fn render_fg_named_colors(frame: &mut Frame, bg: Color, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let vertical = Layout::vertical([Constraint::Length(1); 2]).split(inner);
-    let areas = vertical.iter().flat_map(|area| {
-        Layout::horizontal([Constraint::Ratio(1, 8); 8])
-            .split(*area)
-            .to_vec()
-    });
-    for (fg, area) in NAMED_COLORS.into_iter().zip(areas) {
+    let layout = Layout::vertical([Constraint::Length(1); 2])
+        .split(inner)
+        .iter()
+        .flat_map(|area| {
+            Layout::horizontal([Constraint::Ratio(1, 8); 8])
+                .split(*area)
+                .to_vec()
+        })
+        .collect_vec();
+    for (i, &fg) in NAMED_COLORS.iter().enumerate() {
         let color_name = fg.to_string();
         let paragraph = Paragraph::new(color_name).fg(fg).bg(bg);
-        frame.render_widget(paragraph, area);
+        frame.render_widget(paragraph, layout[i]);
     }
 }
 
@@ -117,16 +134,19 @@ fn render_bg_named_colors(frame: &mut Frame, fg: Color, area: Rect) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let vertical = Layout::vertical([Constraint::Length(1); 2]).split(inner);
-    let areas = vertical.iter().flat_map(|area| {
-        Layout::horizontal([Constraint::Ratio(1, 8); 8])
-            .split(*area)
-            .to_vec()
-    });
-    for (bg, area) in NAMED_COLORS.into_iter().zip(areas) {
+    let layout = Layout::vertical([Constraint::Length(1); 2])
+        .split(inner)
+        .iter()
+        .flat_map(|area| {
+            Layout::horizontal([Constraint::Ratio(1, 8); 8])
+                .split(*area)
+                .to_vec()
+        })
+        .collect_vec();
+    for (i, &bg) in NAMED_COLORS.iter().enumerate() {
         let color_name = bg.to_string();
         let paragraph = Paragraph::new(color_name).fg(fg).bg(bg);
-        frame.render_widget(paragraph, area);
+        frame.render_widget(paragraph, layout[i]);
     }
 }
 
@@ -212,10 +232,10 @@ fn render_indexed_colors(frame: &mut Frame, area: Rect) {
 fn title_block(title: String) -> Block<'static> {
     Block::new()
         .borders(Borders::TOP)
-        .title_alignment(Alignment::Center)
         .border_style(Style::new().dark_gray())
+        .title_top(title)
+        .title_alignment(Alignment::Center)
         .title_style(Style::new().reset())
-        .title(title)
 }
 
 fn render_indexed_grayscale(frame: &mut Frame, area: Rect) {
@@ -246,4 +266,21 @@ fn render_indexed_grayscale(frame: &mut Frame, area: Rect) {
         ]));
         frame.render_widget(paragraph, layout[i as usize - 232]);
     }
+}
+
+fn setup_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>> {
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+    terminal.hide_cursor()?;
+    Ok(terminal)
+}
+
+fn restore_terminal(mut terminal: Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    terminal.show_cursor()?;
+    Ok(())
 }

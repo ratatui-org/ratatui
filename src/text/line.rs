@@ -4,16 +4,14 @@ use std::{borrow::Cow, fmt};
 
 use unicode_truncate::UnicodeTruncateStr;
 
-use crate::{prelude::*, style::Styled, text::StyledGrapheme};
+use super::StyledGrapheme;
+use crate::prelude::*;
 
 /// A line of text, consisting of one or more [`Span`]s.
 ///
 /// [`Line`]s are used wherever text is displayed in the terminal and represent a single line of
 /// text. When a [`Line`] is rendered, it is rendered as a single line of text, with each [`Span`]
 /// being rendered in order (left to right).
-///
-/// Any newlines in the content are removed when creating a [`Line`] using the constructor or
-/// conversion methods.
 ///
 /// # Constructor Methods
 ///
@@ -161,13 +159,6 @@ pub struct Line<'a> {
     pub alignment: Option<Alignment>,
 }
 
-fn cow_to_spans<'a>(content: impl Into<Cow<'a, str>>) -> Vec<Span<'a>> {
-    match content.into() {
-        Cow::Borrowed(s) => s.lines().map(Span::raw).collect(),
-        Cow::Owned(s) => s.lines().map(|v| Span::raw(v.to_string())).collect(),
-    }
-}
-
 impl<'a> Line<'a> {
     /// Create a line with the default style.
     ///
@@ -193,14 +184,17 @@ impl<'a> Line<'a> {
         T: Into<Cow<'a, str>>,
     {
         Self {
-            spans: cow_to_spans(content),
+            spans: content
+                .into()
+                .lines()
+                .map(|v| Span::raw(v.to_string()))
+                .collect(),
             ..Default::default()
         }
     }
 
     /// Create a line with the given style.
-    ///
-    /// `content` can be any type that is convertible to [`Cow<str>`] (e.g. [`&str`], [`String`],
+    // `content` can be any type that is convertible to [`Cow<str>`] (e.g. [`&str`], [`String`],
     /// [`Cow<str>`], or your own type that implements [`Into<Cow<str>>`]).
     ///
     /// `style` accepts any type that is convertible to [`Style`] (e.g. [`Style`], [`Color`], or
@@ -224,7 +218,11 @@ impl<'a> Line<'a> {
         S: Into<Style>,
     {
         Self {
-            spans: cow_to_spans(content),
+            spans: content
+                .into()
+                .lines()
+                .map(|v| Span::raw(v.to_string()))
+                .collect(),
             style: style.into(),
             ..Default::default()
         }
@@ -505,13 +503,13 @@ impl<'a> IntoIterator for &'a mut Line<'a> {
 
 impl<'a> From<String> for Line<'a> {
     fn from(s: String) -> Self {
-        Self::raw(s)
+        Self::from(vec![Span::from(s)])
     }
 }
 
 impl<'a> From<&'a str> for Line<'a> {
     fn from(s: &'a str) -> Self {
-        Self::raw(s)
+        Self::from(vec![Span::from(s)])
     }
 }
 
@@ -548,37 +546,6 @@ where
     }
 }
 
-/// Adds a `Span` to a `Line`, returning a new `Line` with the `Span` added.
-impl<'a> std::ops::Add<Span<'a>> for Line<'a> {
-    type Output = Self;
-
-    fn add(mut self, rhs: Span<'a>) -> Self::Output {
-        self.spans.push(rhs);
-        self
-    }
-}
-
-/// Adds two `Line`s together, returning a new `Text` with the contents of the two `Line`s.
-impl<'a> std::ops::Add<Self> for Line<'a> {
-    type Output = Text<'a>;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Text::from(vec![self, rhs])
-    }
-}
-
-impl<'a> std::ops::AddAssign<Span<'a>> for Line<'a> {
-    fn add_assign(&mut self, rhs: Span<'a>) {
-        self.spans.push(rhs);
-    }
-}
-
-impl<'a> Extend<Span<'a>> for Line<'a> {
-    fn extend<T: IntoIterator<Item = Span<'a>>>(&mut self, iter: T) {
-        self.spans.extend(iter);
-    }
-}
-
 impl Widget for Line<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         self.render_ref(area, buf);
@@ -591,7 +558,6 @@ impl WidgetRef for Line<'_> {
         if area.is_empty() {
             return;
         }
-        let area = Rect { height: 1, ..area };
         let line_width = self.width();
         if line_width == 0 {
             return;
@@ -681,29 +647,6 @@ fn spans_after_width<'a>(
         })
 }
 
-/// A trait for converting a value to a [`Line`].
-///
-/// This trait is automatically implemented for any type that implements the [`Display`] trait. As
-/// such, `ToLine` shouln't be implemented directly: [`Display`] should be implemented instead, and
-/// you get the `ToLine` implementation for free.
-///
-/// [`Display`]: std::fmt::Display
-pub trait ToLine {
-    /// Converts the value to a [`Line`].
-    fn to_line(&self) -> Line<'_>;
-}
-
-/// # Panics
-///
-/// In this implementation, the `to_line` method panics if the `Display` implementation returns an
-/// error. This indicates an incorrect `Display` implementation since `fmt::Write for String` never
-/// returns an error itself.
-impl<T: fmt::Display> ToLine for T {
-    fn to_line(&self) -> Line<'_> {
-        Line::from(self.to_string())
-    }
-}
-
 impl fmt::Display for Line<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for span in &self.spans {
@@ -741,11 +684,11 @@ mod tests {
     #[test]
     fn raw_str() {
         let line = Line::raw("test content");
-        assert_eq!(line.spans, [Span::raw("test content")]);
+        assert_eq!(line.spans, vec![Span::raw("test content")]);
         assert_eq!(line.alignment, None);
 
         let line = Line::raw("a\nb");
-        assert_eq!(line.spans, [Span::raw("a"), Span::raw("b")]);
+        assert_eq!(line.spans, vec![Span::raw("a"), Span::raw("b")]);
         assert_eq!(line.alignment, None);
     }
 
@@ -754,7 +697,7 @@ mod tests {
         let style = Style::new().yellow();
         let content = "Hello, world!";
         let line = Line::styled(content, style);
-        assert_eq!(line.spans, [Span::raw(content)]);
+        assert_eq!(line.spans, vec![Span::raw(content)]);
         assert_eq!(line.style, style);
     }
 
@@ -763,7 +706,7 @@ mod tests {
         let style = Style::new().yellow();
         let content = String::from("Hello, world!");
         let line = Line::styled(content.clone(), style);
-        assert_eq!(line.spans, [Span::raw(content)]);
+        assert_eq!(line.spans, vec![Span::raw(content)]);
         assert_eq!(line.style, style);
     }
 
@@ -772,7 +715,7 @@ mod tests {
         let style = Style::new().yellow();
         let content = Cow::from("Hello, world!");
         let line = Line::styled(content.clone(), style);
-        assert_eq!(line.spans, [Span::raw(content)]);
+        assert_eq!(line.spans, vec![Span::raw(content)]);
         assert_eq!(line.style, style);
     }
 
@@ -861,28 +804,14 @@ mod tests {
     fn from_string() {
         let s = String::from("Hello, world!");
         let line = Line::from(s);
-        assert_eq!(line.spans, [Span::from("Hello, world!")]);
-
-        let s = String::from("Hello\nworld!");
-        let line = Line::from(s);
-        assert_eq!(line.spans, [Span::from("Hello"), Span::from("world!")]);
+        assert_eq!(vec![Span::from("Hello, world!")], line.spans);
     }
 
     #[test]
     fn from_str() {
         let s = "Hello, world!";
         let line = Line::from(s);
-        assert_eq!(line.spans, [Span::from("Hello, world!")]);
-
-        let s = "Hello\nworld!";
-        let line = Line::from(s);
-        assert_eq!(line.spans, [Span::from("Hello"), Span::from("world!")]);
-    }
-
-    #[test]
-    fn to_line() {
-        let line = 42.to_line();
-        assert_eq!(line.spans, [Span::from("42")]);
+        assert_eq!(vec![Span::from("Hello, world!")], line.spans);
     }
 
     #[test]
@@ -892,7 +821,7 @@ mod tests {
             Span::styled(" world!", Style::default().fg(Color::Green)),
         ];
         let line = Line::from(spans.clone());
-        assert_eq!(line.spans, spans);
+        assert_eq!(spans, line.spans);
     }
 
     #[test]
@@ -925,63 +854,7 @@ mod tests {
     fn from_span() {
         let span = Span::styled("Hello, world!", Style::default().fg(Color::Yellow));
         let line = Line::from(span.clone());
-        assert_eq!(line.spans, [span]);
-    }
-
-    #[test]
-    fn add_span() {
-        assert_eq!(
-            Line::raw("Red").red() + Span::raw("blue").blue(),
-            Line {
-                spans: vec![Span::raw("Red"), Span::raw("blue").blue()],
-                style: Style::new().red(),
-                alignment: None,
-            },
-        );
-    }
-
-    #[test]
-    fn add_line() {
-        assert_eq!(
-            Line::raw("Red").red() + Line::raw("Blue").blue(),
-            Text {
-                lines: vec![Line::raw("Red").red(), Line::raw("Blue").blue()],
-                style: Style::default(),
-                alignment: None,
-            }
-        );
-    }
-
-    #[test]
-    fn add_assign_span() {
-        let mut line = Line::raw("Red").red();
-        line += Span::raw("Blue").blue();
-        assert_eq!(
-            line,
-            Line {
-                spans: vec![Span::raw("Red"), Span::raw("Blue").blue()],
-                style: Style::new().red(),
-                alignment: None,
-            },
-        );
-    }
-
-    #[test]
-    fn extend() {
-        let mut line = Line::from("Hello, ");
-        line.extend([Span::raw("world!")]);
-        assert_eq!(line.spans, [Span::raw("Hello, "), Span::raw("world!")]);
-
-        let mut line = Line::from("Hello, ");
-        line.extend([Span::raw("world! "), Span::raw("How are you?")]);
-        assert_eq!(
-            line.spans,
-            [
-                Span::raw("Hello, "),
-                Span::raw("world! "),
-                Span::raw("How are you?")
-            ]
-        );
+        assert_eq!(vec![span], line.spans);
     }
 
     #[test]
@@ -991,7 +864,7 @@ mod tests {
             Span::styled(" world!", Style::default().fg(Color::Green)),
         ]);
         let s: String = line.into();
-        assert_eq!(s, "Hello, world!");
+        assert_eq!("Hello, world!", s);
     }
 
     #[test]
@@ -1125,17 +998,6 @@ mod tests {
         }
 
         #[test]
-        fn render_only_styles_first_line() {
-            let mut buf = Buffer::empty(Rect::new(0, 0, 20, 2));
-            hello_world().render(buf.area, &mut buf);
-            let mut expected = Buffer::with_lines(["Hello world!        ", "                    "]);
-            expected.set_style(Rect::new(0, 0, 20, 1), ITALIC);
-            expected.set_style(Rect::new(0, 0, 6, 1), BLUE);
-            expected.set_style(Rect::new(6, 0, 6, 1), GREEN);
-            assert_eq!(buf, expected);
-        }
-
-        #[test]
         fn render_truncates() {
             let mut buf = Buffer::empty(Rect::new(0, 0, 10, 1));
             Line::from("Hello world!").render(Rect::new(0, 0, 5, 1), &mut buf);
@@ -1193,7 +1055,7 @@ mod tests {
             assert_eq!(buf, Buffer::with_lines(["lo wo"]));
         }
 
-        /// Part of a regression test for <https://github.com/ratatui/ratatui/issues/1032> which
+        /// Part of a regression test for <https://github.com/ratatui-org/ratatui/issues/1032> which
         /// found panics with truncating lines that contained multi-byte characters.
         #[test]
         fn regression_1032() {
@@ -1209,7 +1071,7 @@ mod tests {
 
         /// Documentary test to highlight the crab emoji width / length discrepancy
         ///
-        /// Part of a regression test for <https://github.com/ratatui/ratatui/issues/1032> which
+        /// Part of a regression test for <https://github.com/ratatui-org/ratatui/issues/1032> which
         /// found panics with truncating lines that contained multi-byte characters.
         #[test]
         fn crab_emoji_width() {
@@ -1220,7 +1082,7 @@ mod tests {
             assert_eq!(crab.width(), 2); // display width
         }
 
-        /// Part of a regression test for <https://github.com/ratatui/ratatui/issues/1032> which
+        /// Part of a regression test for <https://github.com/ratatui-org/ratatui/issues/1032> which
         /// found panics with truncating lines that contained multi-byte characters.
         #[rstest]
         #[case::left_4(Alignment::Left, 4, "1234")]
@@ -1242,7 +1104,7 @@ mod tests {
             assert_eq!(buf, Buffer::with_lines([expected]));
         }
 
-        /// Part of a regression test for <https://github.com/ratatui/ratatui/issues/1032> which
+        /// Part of a regression test for <https://github.com/ratatui-org/ratatui/issues/1032> which
         /// found panics with truncating lines that contained multi-byte characters.
         ///
         /// centering is tricky because there's an ambiguity about whether to take one more char
@@ -1307,7 +1169,7 @@ mod tests {
         fn render_truncates_away_from_0x0(#[case] alignment: Alignment, #[case] expected: &str) {
             let line = Line::from(vec![Span::raw("a🦀b"), Span::raw("c🦀d")]).alignment(alignment);
             // Fill buffer with stuff to ensure the output is indeed padded
-            let mut buf = Buffer::filled(Rect::new(0, 0, 10, 1), Cell::new("X"));
+            let mut buf = Buffer::filled(Rect::new(0, 0, 10, 1), Cell::default().set_symbol("X"));
             let area = Rect::new(2, 0, 6, 1);
             line.render_ref(area, &mut buf);
             assert_eq!(buf, Buffer::with_lines([expected]));
@@ -1326,12 +1188,12 @@ mod tests {
             let line = Line::from(vec![Span::raw("a🦀b"), Span::raw("c🦀d")]).right_aligned();
             let area = Rect::new(0, 0, buf_width, 1);
             // Fill buffer with stuff to ensure the output is indeed padded
-            let mut buf = Buffer::filled(area, Cell::new("X"));
+            let mut buf = Buffer::filled(area, Cell::default().set_symbol("X"));
             line.render_ref(buf.area, &mut buf);
             assert_eq!(buf, Buffer::with_lines([expected]));
         }
 
-        /// Part of a regression test for <https://github.com/ratatui/ratatui/issues/1032> which
+        /// Part of a regression test for <https://github.com/ratatui-org/ratatui/issues/1032> which
         /// found panics with truncating lines that contained multi-byte characters.
         ///
         /// Flag emoji are actually two independent characters, so they can be truncated in the
@@ -1345,7 +1207,7 @@ mod tests {
             assert_eq!(str.width(), 6); // flag is 2 display width
         }
 
-        /// Part of a regression test for <https://github.com/ratatui/ratatui/issues/1032> which
+        /// Part of a regression test for <https://github.com/ratatui-org/ratatui/issues/1032> which
         /// found panics with truncating lines that contained multi-byte characters.
         #[rstest]
         #[case::flag_1(1, " ")]
@@ -1408,13 +1270,6 @@ mod tests {
             let mut buf = Buffer::empty(Rect::new(0, 0, 32, 1));
             line.render_ref(buf.area, &mut buf);
             assert_eq!(buf, Buffer::with_lines([expected]));
-        }
-
-        #[test]
-        fn render_with_newlines() {
-            let mut buf = Buffer::empty(Rect::new(0, 0, 11, 1));
-            Line::from("Hello\nworld!").render(Rect::new(0, 0, 11, 1), &mut buf);
-            assert_eq!(buf, Buffer::with_lines(["Helloworld!"]));
         }
     }
 

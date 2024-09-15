@@ -19,7 +19,7 @@
 
 #[cfg(feature = "crossterm")]
 pub use crate::backend::CrosstermBackend;
-#[cfg(all(not(windows), feature = "termion"))]
+#[cfg(feature = "termion")]
 pub use crate::backend::TermionBackend;
 #[cfg(feature = "termwiz")]
 pub use crate::backend::TermwizBackend;
@@ -27,10 +27,10 @@ pub(crate) use crate::widgets::{StatefulWidgetRef, WidgetRef};
 pub use crate::{
     backend::{self, Backend},
     buffer::{self, Buffer},
-    layout::{self, Alignment, Constraint, Direction, Layout, Margin, Position, Rect, Size},
-    style::{self, Color, Modifier, Style, Stylize},
-    symbols::{self},
+    layout::{self, Alignment, Constraint, Corner, Direction, Layout, Margin, Rect},
+    style::{self, Color, Modifier, Style, Styled, Stylize},
+    symbols::{self, Marker},
+    terminal::{CompletedFrame, Frame, Terminal, TerminalOptions, Viewport},
     text::{self, Line, Masked, Span, Text},
     widgets::{block::BlockExt, StatefulWidget, Widget},
-    Frame, Terminal,
 };

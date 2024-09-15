@@ -96,22 +96,19 @@
 //! [Crossterm]: https://crates.io/crates/crossterm
 //! [Termion]: https://crates.io/crates/termion
 //! [Termwiz]: https://crates.io/crates/termwiz
-//! [Examples]: https://github.com/ratatui/ratatui/tree/main/examples/README.md
+//! [Examples]: https://github.com/ratatui-org/ratatui/tree/main/examples/README.md
 //! [Backend Comparison]:
 //!     https://ratatui.rs/concepts/backends/comparison/
-//! [Ratatui Website]: https://ratatui.rs
+//! [Ratatui Website]: https://ratatui-org.github.io/ratatui-book
 use std::io;
 
 use strum::{Display, EnumString};
 
-use crate::{
-    buffer::Cell,
-    layout::{Position, Size},
-};
+use crate::{buffer::Cell, layout::Size, prelude::Rect};
 
-#[cfg(all(not(windows), feature = "termion"))]
+#[cfg(feature = "termion")]
 mod termion;
-#[cfg(all(not(windows), feature = "termion"))]
+#[cfg(feature = "termion")]
 pub use self::termion::TermionBackend;
 
 #[cfg(feature = "crossterm")]
@@ -195,25 +192,25 @@ pub trait Backend {
     /// # std::io::Result::Ok(())
     /// ```
     ///
-    /// [`show_cursor`]: Self::show_cursor
+    /// [`show_cursor`]: Backend::show_cursor
     fn hide_cursor(&mut self) -> io::Result<()>;
 
     /// Show the cursor on the terminal screen.
     ///
     /// See [`hide_cursor`] for an example.
     ///
-    /// [`hide_cursor`]: Self::hide_cursor
+    /// [`hide_cursor`]: Backend::hide_cursor
     fn show_cursor(&mut self) -> io::Result<()>;
 
     /// Get the current cursor position on the terminal screen.
     ///
-    /// The returned tuple contains the x and y coordinates of the cursor.
-    /// The origin (0, 0) is at the top left corner of the screen.
+    /// The returned tuple contains the x and y coordinates of the cursor. The origin
+    /// (0, 0) is at the top left corner of the screen.
     ///
-    /// See [`set_cursor_position`] for an example.
+    /// See [`set_cursor`] for an example.
     ///
-    /// [`set_cursor_position`]: Self::set_cursor_position
-    fn get_cursor_position(&mut self) -> io::Result<Position>;
+    /// [`set_cursor`]: Backend::set_cursor
+    fn get_cursor(&mut self) -> io::Result<(u16, u16)>;
 
     /// Set the cursor position on the terminal screen to the given x and y coordinates.
     ///
@@ -223,31 +220,14 @@ pub trait Backend {
     ///
     /// ```rust
     /// # use ratatui::backend::{Backend, TestBackend};
-    /// # use ratatui::layout::Position;
     /// # let mut backend = TestBackend::new(80, 25);
-    /// backend.set_cursor_position(Position { x: 10, y: 20 })?;
-    /// assert_eq!(backend.get_cursor_position()?, Position { x: 10, y: 20 });
+    /// backend.set_cursor(10, 20)?;
+    /// assert_eq!(backend.get_cursor()?, (10, 20));
     /// # std::io::Result::Ok(())
     /// ```
-    fn set_cursor_position<P: Into<Position>>(&mut self, position: P) -> io::Result<()>;
-
-    /// Get the current cursor position on the terminal screen.
     ///
-    /// The returned tuple contains the x and y coordinates of the cursor. The origin
-    /// (0, 0) is at the top left corner of the screen.
-    #[deprecated = "the method get_cursor_position indicates more clearly what about the cursor to get"]
-    fn get_cursor(&mut self) -> io::Result<(u16, u16)> {
-        let Position { x, y } = self.get_cursor_position()?;
-        Ok((x, y))
-    }
-
-    /// Set the cursor position on the terminal screen to the given x and y coordinates.
-    ///
-    /// The origin (0, 0) is at the top left corner of the screen.
-    #[deprecated = "the method set_cursor_position indicates more clearly what about the cursor to set"]
-    fn set_cursor(&mut self, x: u16, y: u16) -> io::Result<()> {
-        self.set_cursor_position(Position { x, y })
-    }
+    /// [`get_cursor`]: Backend::get_cursor
+    fn set_cursor(&mut self, x: u16, y: u16) -> io::Result<()>;
 
     /// Clears the whole terminal screen
     ///
@@ -281,7 +261,7 @@ pub trait Backend {
     /// This method will return an error if the terminal screen could not be cleared. It will also
     /// return an error if the `clear_type` is not supported by the backend.
     ///
-    /// [`clear`]: Self::clear
+    /// [`clear`]: Backend::clear
     fn clear_region(&mut self, clear_type: ClearType) -> io::Result<()> {
         match clear_type {
             ClearType::All => self.clear(),
@@ -295,19 +275,19 @@ pub trait Backend {
         }
     }
 
-    /// Get the size of the terminal screen in columns/rows as a [`Size`].
+    /// Get the size of the terminal screen in columns/rows as a [`Rect`].
     ///
-    /// The returned [`Size`] contains the width and height of the terminal screen.
+    /// The returned [`Rect`] contains the width and height of the terminal screen.
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// # use ratatui::{prelude::*, backend::TestBackend};
     /// let backend = TestBackend::new(80, 25);
-    /// assert_eq!(backend.size()?, Size::new(80, 25));
+    /// assert_eq!(backend.size()?, Rect::new(0, 0, 80, 25));
     /// # std::io::Result::Ok(())
     /// ```
-    fn size(&self) -> io::Result<Size>;
+    fn size(&self) -> io::Result<Rect>;
 
     /// Get the size of the terminal screen in columns/rows and pixels as a [`WindowSize`].
     ///

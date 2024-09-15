@@ -30,7 +30,7 @@ pub use self::{
     points::Points,
     rectangle::Rectangle,
 };
-use crate::{prelude::*, symbols::Marker, text::Line as TextLine, widgets::Block};
+use crate::{prelude::*, text::Line as TextLine, widgets::Block};
 
 /// Something that can be drawn on a [`Canvas`].
 ///
@@ -464,17 +464,17 @@ impl<'a> Context<'a> {
         height: u16,
         x_bounds: [f64; 2],
         y_bounds: [f64; 2],
-        marker: Marker,
+        marker: symbols::Marker,
     ) -> Self {
         let dot = symbols::DOT.chars().next().unwrap();
         let block = symbols::block::FULL.chars().next().unwrap();
         let bar = symbols::bar::HALF.chars().next().unwrap();
         let grid: Box<dyn Grid> = match marker {
-            Marker::Dot => Box::new(CharGrid::new(width, height, dot)),
-            Marker::Block => Box::new(CharGrid::new(width, height, block)),
-            Marker::Bar => Box::new(CharGrid::new(width, height, bar)),
-            Marker::Braille => Box::new(BrailleGrid::new(width, height)),
-            Marker::HalfBlock => Box::new(HalfBlockGrid::new(width, height)),
+            symbols::Marker::Dot => Box::new(CharGrid::new(width, height, dot)),
+            symbols::Marker::Block => Box::new(CharGrid::new(width, height, block)),
+            symbols::Marker::Bar => Box::new(CharGrid::new(width, height, bar)),
+            symbols::Marker::Braille => Box::new(BrailleGrid::new(width, height)),
+            symbols::Marker::HalfBlock => Box::new(HalfBlockGrid::new(width, height)),
         };
         Self {
             x_bounds,
@@ -567,7 +567,7 @@ impl<'a> Context<'a> {
 /// };
 ///
 /// Canvas::default()
-///     .block(Block::bordered().title("Canvas"))
+///     .block(Block::bordered().title_top("Canvas"))
 ///     .x_bounds([-180.0, 180.0])
 ///     .y_bounds([-90.0, 90.0])
 ///     .paint(|ctx| {
@@ -604,7 +604,7 @@ where
     y_bounds: [f64; 2],
     paint_func: Option<F>,
     background_color: Color,
-    marker: Marker,
+    marker: symbols::Marker,
 }
 
 impl<'a, F> Default for Canvas<'a, F>
@@ -618,7 +618,7 @@ where
             y_bounds: [0.0, 0.0],
             paint_func: None,
             background_color: Color::Reset,
-            marker: Marker::Braille,
+            marker: symbols::Marker::Braille,
         }
     }
 }
@@ -717,7 +717,7 @@ where
     ///     .paint(|ctx| {});
     /// ```
     #[must_use = "method moves the value of self and returns the modified value"]
-    pub const fn marker(mut self, marker: Marker) -> Self {
+    pub const fn marker(mut self, marker: symbols::Marker) -> Self {
         self.marker = marker;
         self
     }
@@ -771,7 +771,7 @@ where
                         (index % width) as u16 + canvas_area.left(),
                         (index / width) as u16 + canvas_area.top(),
                     );
-                    let cell = buf[(x, y)].set_char(ch);
+                    let cell = buf.get_mut(x, y).set_char(ch);
                     if colors.0 != Color::Reset {
                         cell.set_fg(colors.0);
                     }
@@ -817,7 +817,9 @@ mod tests {
     // results in the expected output
     fn test_marker(marker: Marker, expected: &str) {
         let area = Rect::new(0, 0, 5, 5);
-        let mut buf = Buffer::filled(area, Cell::new("x"));
+        let mut cell = Cell::default();
+        cell.set_char('x');
+        let mut buf = Buffer::filled(area, &cell);
         let horizontal_line = Line {
             x1: 0.0,
             y1: 0.0,

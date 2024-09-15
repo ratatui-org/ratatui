@@ -1,14 +1,12 @@
-use crate::{prelude::*, style::Styled, widgets::Block};
+use crate::{prelude::*, widgets::Block};
 
 /// A widget to display a progress bar.
 ///
 /// A `Gauge` renders a bar filled according to the value given to [`Gauge::percent`] or
 /// [`Gauge::ratio`]. The bar width and height are defined by the [`Rect`] it is
 /// [rendered](Widget::render) in.
-///
 /// The associated label is always centered horizontally and vertically. If not set with
 /// [`Gauge::label`], the label is the percentage of the bar filled.
-///
 /// You might want to have a higher precision bar using [`Gauge::use_unicode`].
 ///
 /// This can be useful to indicate the progression of a task, like a download.
@@ -19,7 +17,7 @@ use crate::{prelude::*, style::Styled, widgets::Block};
 /// use ratatui::{prelude::*, widgets::*};
 ///
 /// Gauge::default()
-///     .block(Block::bordered().title("Progress"))
+///     .block(Block::bordered().title_top("Progress"))
 ///     .gauge_style(
 ///         Style::default()
 ///             .fg(Color::White)
@@ -33,7 +31,7 @@ use crate::{prelude::*, style::Styled, widgets::Block};
 ///
 /// - [`LineGauge`] for a thin progress bar
 #[allow(clippy::struct_field_names)] // gauge_style needs to be differentiated to style
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Gauge<'a> {
     block: Option<Block<'a>>,
     ratio: f64,
@@ -41,6 +39,19 @@ pub struct Gauge<'a> {
     use_unicode: bool,
     style: Style,
     gauge_style: Style,
+}
+
+impl<'a> Default for Gauge<'a> {
+    fn default() -> Self {
+        Self {
+            block: None,
+            ratio: 0.0,
+            label: None,
+            use_unicode: false,
+            style: Style::default(),
+            gauge_style: Style::default(),
+        }
+    }
 }
 
 impl<'a> Gauge<'a> {
@@ -184,23 +195,23 @@ impl Gauge<'_> {
         for y in gauge_area.top()..gauge_area.bottom() {
             // render the filled area (left to end)
             for x in gauge_area.left()..end {
+                let cell = buf.get_mut(x, y);
                 // Use full block for the filled part of the gauge and spaces for the part that is
                 // covered by the label. Note that the background and foreground colors are swapped
                 // for the label part, otherwise the gauge will be inverted
                 if x < label_col || x > label_col + clamped_label_width || y != label_row {
-                    buf[(x, y)]
-                        .set_symbol(symbols::block::FULL)
+                    cell.set_symbol(symbols::block::FULL)
                         .set_fg(self.gauge_style.fg.unwrap_or(Color::Reset))
                         .set_bg(self.gauge_style.bg.unwrap_or(Color::Reset));
                 } else {
-                    buf[(x, y)]
-                        .set_symbol(" ")
+                    cell.set_symbol(" ")
                         .set_fg(self.gauge_style.bg.unwrap_or(Color::Reset))
                         .set_bg(self.gauge_style.fg.unwrap_or(Color::Reset));
                 }
             }
             if self.use_unicode && self.ratio < 1.0 {
-                buf[(end, y)].set_symbol(get_unicode_block(filled_width % 1.0));
+                buf.get_mut(end, y)
+                    .set_symbol(get_unicode_block(filled_width % 1.0));
             }
         }
         // render the label
@@ -224,20 +235,14 @@ fn get_unicode_block<'a>(frac: f64) -> &'a str {
 
 /// A compact widget to display a progress bar over a single thin line.
 ///
-/// This can be useful to indicate the progression of a task, like a download.
-///
 /// A `LineGauge` renders a thin line filled according to the value given to [`LineGauge::ratio`].
-/// Unlike [`Gauge`], only the width can be defined by the [rendering](Widget::render) [`Rect`]. The
-/// height is always 1.
-///
-/// The associated label is always left-aligned. If not set with [`LineGauge::label`], the label is
-/// the percentage of the bar filled.
-///
+/// Unlike [`Gauge`], only the width can be defined by the [rendering](Widget::render) [`Rect`].
+/// The height is always 1.
+/// The associated label is always left-aligned. If not set with [`LineGauge::label`], the label
+/// is the percentage of the bar filled.
 /// You can also set the symbols used to draw the bar with [`LineGauge::line_set`].
 ///
-/// To style the gauge line use [`LineGauge::filled_style`] and [`LineGauge::unfilled_style`] which
-/// let you pick a color for foreground (i.e. line) and background of the filled and unfilled part
-/// of gauge respectively.
+/// This can be useful to indicate the progression of a task, like a download.
 ///
 /// # Examples:
 ///
@@ -245,8 +250,8 @@ fn get_unicode_block<'a>(frac: f64) -> &'a str {
 /// use ratatui::{prelude::*, widgets::*};
 ///
 /// LineGauge::default()
-///     .block(Block::bordered().title("Progress"))
-///     .filled_style(
+///     .block(Block::bordered().title_top("Progress"))
+///     .gauge_style(
 ///         Style::default()
 ///             .fg(Color::White)
 ///             .bg(Color::Black)
@@ -266,8 +271,7 @@ pub struct LineGauge<'a> {
     label: Option<Line<'a>>,
     line_set: symbols::line::Set,
     style: Style,
-    filled_style: Style,
-    unfilled_style: Style,
+    gauge_style: Style,
 }
 
 impl<'a> LineGauge<'a> {
@@ -339,40 +343,9 @@ impl<'a> LineGauge<'a> {
     ///
     /// `style` accepts any type that is convertible to [`Style`] (e.g. [`Style`], [`Color`], or
     /// your own type that implements [`Into<Style>`]).
-    #[deprecated(
-        since = "0.27.0",
-        note = "You should use `LineGauge::filled_style` instead."
-    )]
     #[must_use = "method moves the value of self and returns the modified value"]
     pub fn gauge_style<S: Into<Style>>(mut self, style: S) -> Self {
-        let style: Style = style.into();
-
-        // maintain backward compatibility, which used the background color of the style as the
-        // unfilled part of the gauge and the foreground color as the filled part of the gauge
-        let filled_color = style.fg.unwrap_or(Color::Reset);
-        let unfilled_color = style.bg.unwrap_or(Color::Reset);
-        self.filled_style = style.fg(filled_color).bg(Color::Reset);
-        self.unfilled_style = style.fg(unfilled_color).bg(Color::Reset);
-        self
-    }
-
-    /// Sets the style of filled part of the bar.
-    ///
-    /// `style` accepts any type that is convertible to [`Style`] (e.g. [`Style`], [`Color`], or
-    /// your own type that implements [`Into<Style>`]).
-    #[must_use = "method moves the value of self and returns the modified value"]
-    pub fn filled_style<S: Into<Style>>(mut self, style: S) -> Self {
-        self.filled_style = style.into();
-        self
-    }
-
-    /// Sets the style of the unfilled part of the bar.
-    ///
-    /// `style` accepts any type that is convertible to [`Style`] (e.g. [`Style`], [`Color`], or
-    /// your own type that implements [`Into<Style>`]).
-    #[must_use = "method moves the value of self and returns the modified value"]
-    pub fn unfilled_style<S: Into<Style>>(mut self, style: S) -> Self {
-        self.unfilled_style = style.into();
+        self.gauge_style = style.into();
         self
     }
 }
@@ -404,14 +377,28 @@ impl WidgetRef for LineGauge<'_> {
         let end = start
             + (f64::from(gauge_area.right().saturating_sub(start)) * self.ratio).floor() as u16;
         for col in start..end {
-            buf[(col, row)]
+            buf.get_mut(col, row)
                 .set_symbol(self.line_set.horizontal)
-                .set_style(self.filled_style);
+                .set_style(Style {
+                    fg: self.gauge_style.fg,
+                    bg: None,
+                    #[cfg(feature = "underline-color")]
+                    underline_color: self.gauge_style.underline_color,
+                    add_modifier: self.gauge_style.add_modifier,
+                    sub_modifier: self.gauge_style.sub_modifier,
+                });
         }
         for col in end..gauge_area.right() {
-            buf[(col, row)]
+            buf.get_mut(col, row)
                 .set_symbol(self.line_set.horizontal)
-                .set_style(self.unfilled_style);
+                .set_style(Style {
+                    fg: self.gauge_style.bg,
+                    bg: None,
+                    #[cfg(feature = "underline-color")]
+                    underline_color: self.gauge_style.underline_color,
+                    add_modifier: self.gauge_style.add_modifier,
+                    sub_modifier: self.gauge_style.sub_modifier,
+                });
         }
     }
 }
@@ -491,36 +478,24 @@ mod tests {
         );
     }
 
-    #[allow(deprecated)]
-    #[test]
-    fn line_gauge_can_be_stylized_with_deprecated_gauge_style() {
-        let gauge =
-            LineGauge::default().gauge_style(Style::default().fg(Color::Red).bg(Color::Blue));
-
-        assert_eq!(
-            gauge.filled_style,
-            Style::default().fg(Color::Red).bg(Color::Reset)
-        );
-
-        assert_eq!(
-            gauge.unfilled_style,
-            Style::default().fg(Color::Blue).bg(Color::Reset)
-        );
-    }
-
     #[test]
     fn line_gauge_default() {
+        // TODO: replace to `assert_eq!(LineGauge::default(), LineGauge::default())`
+        // when `Eq` or `PartialEq` is implemented for `LineGauge`.
         assert_eq!(
-            LineGauge::default(),
-            LineGauge {
-                block: None,
-                ratio: 0.0,
-                label: None,
-                style: Style::default(),
-                line_set: symbols::line::NORMAL,
-                filled_style: Style::default(),
-                unfilled_style: Style::default()
-            }
+            format!("{:?}", LineGauge::default()),
+            format!(
+                "{:?}",
+                LineGauge {
+                    block: None,
+                    ratio: 0.0,
+                    label: None,
+                    style: Style::default(),
+                    line_set: symbols::line::NORMAL,
+                    gauge_style: Style::default(),
+                }
+            ),
+            "LineGauge::default() should have correct default values."
         );
     }
 }

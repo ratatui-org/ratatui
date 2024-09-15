@@ -9,40 +9,21 @@
 //! See the [examples readme] for more information on finding examples that match the version of the
 //! library you are using.
 //!
-//! [Ratatui]: https://github.com/ratatui/ratatui
-//! [examples]: https://github.com/ratatui/ratatui/blob/main/examples
-//! [examples readme]: https://github.com/ratatui/ratatui/blob/main/examples/README.md
+//! [Ratatui]: https://github.com/ratatui-org/ratatui
+//! [examples]: https://github.com/ratatui-org/ratatui/blob/main/examples
+//! [examples readme]: https://github.com/ratatui-org/ratatui/blob/main/examples/README.md
 
-use std::{io::stdout, ops::ControlFlow, time::Duration};
+use std::{error::Error, io, ops::ControlFlow, time::Duration};
 
-use color_eyre::Result;
-use ratatui::{
-    buffer::Buffer,
-    crossterm::{
-        event::{
-            self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseButton, MouseEvent,
-            MouseEventKind,
-        },
-        execute,
+use crossterm::{
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseButton, MouseEvent,
+        MouseEventKind,
     },
-    layout::{Constraint, Layout, Rect},
-    style::{Color, Style},
-    text::Line,
-    widgets::{Paragraph, Widget},
-    DefaultTerminal, Frame,
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-
-fn main() -> Result<()> {
-    color_eyre::install()?;
-    let terminal = ratatui::init();
-    execute!(stdout(), EnableMouseCapture)?;
-    let app_result = run(terminal);
-    ratatui::restore();
-    if let Err(err) = execute!(stdout(), DisableMouseCapture) {
-        eprintln!("Error disabling mouse capture: {err}");
-    }
-    app_result
-}
+use ratatui::{prelude::*, widgets::Paragraph};
 
 /// A custom widget that renders a button with a label, theme and state.
 #[derive(Debug, Clone)]
@@ -154,11 +135,38 @@ impl Button<'_> {
     }
 }
 
-fn run(mut terminal: DefaultTerminal) -> Result<()> {
+fn main() -> Result<(), Box<dyn Error>> {
+    // setup terminal
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    // create app and run it
+    let res = run_app(&mut terminal);
+
+    // restore terminal
+    disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
+    terminal.show_cursor()?;
+
+    if let Err(err) = res {
+        println!("{err:?}");
+    }
+
+    Ok(())
+}
+
+fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> io::Result<()> {
     let mut selected_button: usize = 0;
     let mut button_states = [State::Selected, State::Normal, State::Normal];
     loop {
-        terminal.draw(|frame| draw(frame, button_states))?;
+        terminal.draw(|frame| ui(frame, button_states))?;
         if !event::poll(Duration::from_millis(100))? {
             continue;
         }
@@ -180,14 +188,14 @@ fn run(mut terminal: DefaultTerminal) -> Result<()> {
     Ok(())
 }
 
-fn draw(frame: &mut Frame, states: [State; 3]) {
+fn ui(frame: &mut Frame, states: [State; 3]) {
     let vertical = Layout::vertical([
         Constraint::Length(1),
         Constraint::Max(3),
         Constraint::Length(1),
         Constraint::Min(0), // ignore remaining space
     ]);
-    let [title, buttons, help, _] = vertical.areas(frame.area());
+    let [title, buttons, help, _] = vertical.areas(frame.size());
 
     frame.render_widget(
         Paragraph::new("Custom Widget Example (mouse enabled)"),

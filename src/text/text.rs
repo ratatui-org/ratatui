@@ -1,7 +1,9 @@
 #![warn(missing_docs)]
 use std::{borrow::Cow, fmt};
 
-use crate::{prelude::*, style::Styled};
+use itertools::{Itertools, Position};
+
+use crate::prelude::*;
 
 /// A string split over one or more lines.
 ///
@@ -568,33 +570,6 @@ where
     }
 }
 
-impl<'a> std::ops::Add<Line<'a>> for Text<'a> {
-    type Output = Self;
-
-    fn add(mut self, line: Line<'a>) -> Self::Output {
-        self.push_line(line);
-        self
-    }
-}
-
-/// Adds two `Text` together.
-///
-/// This ignores the style and alignment of the second `Text`.
-impl<'a> std::ops::Add<Self> for Text<'a> {
-    type Output = Self;
-
-    fn add(mut self, text: Self) -> Self::Output {
-        self.lines.extend(text.lines);
-        self
-    }
-}
-
-impl<'a> std::ops::AddAssign<Line<'a>> for Text<'a> {
-    fn add_assign(&mut self, line: Line<'a>) {
-        self.push_line(line);
-    }
-}
-
 impl<'a, T> Extend<T> for Text<'a>
 where
     T: Into<Line<'a>>,
@@ -605,36 +580,14 @@ where
     }
 }
 
-/// A trait for converting a value to a [`Text`].
-///
-/// This trait is automatically implemented for any type that implements the [`Display`] trait. As
-/// such, `ToText` shouldn't be implemented directly: [`Display`] should be implemented instead, and
-/// you get the `ToText` implementation for free.
-///
-/// [`Display`]: std::fmt::Display
-pub trait ToText {
-    /// Converts the value to a [`Text`].
-    fn to_text(&self) -> Text<'_>;
-}
-
-/// # Panics
-///
-/// In this implementation, the `to_text` method panics if the `Display` implementation returns an
-/// error. This indicates an incorrect `Display` implementation since `fmt::Write for String` never
-/// returns an error itself.
-impl<T: fmt::Display> ToText for T {
-    fn to_text(&self) -> Text {
-        Text::raw(self.to_string())
-    }
-}
-
 impl fmt::Display for Text<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some((last, rest)) = self.lines.split_last() {
-            for line in rest {
+        for (position, line) in self.iter().with_position() {
+            if position == Position::Last {
+                write!(f, "{line}")?;
+            } else {
                 writeln!(f, "{line}")?;
             }
-            write!(f, "{last}")?;
         }
         Ok(())
     }
@@ -791,25 +744,7 @@ mod tests {
     #[test]
     fn from_line() {
         let text = Text::from(Line::from("The first line"));
-        assert_eq!(text.lines, [Line::from("The first line")]);
-    }
-
-    #[rstest]
-    #[case(42, Text::from("42"))]
-    #[case("just\ntesting", Text::from("just\ntesting"))]
-    #[case(true, Text::from("true"))]
-    #[case(6.66, Text::from("6.66"))]
-    #[case('a', Text::from("a"))]
-    #[case(String::from("hello"), Text::from("hello"))]
-    #[case(-1, Text::from("-1"))]
-    #[case("line1\nline2", Text::from("line1\nline2"))]
-    #[case(
-        "first line\nsecond line\nthird line",
-        Text::from("first line\nsecond line\nthird line")
-    )]
-    #[case("trailing newline\n", Text::from("trailing newline\n"))]
-    fn to_text(#[case] value: impl fmt::Display, #[case] expected: Text) {
-        assert_eq!(value.to_text(), expected);
+        assert_eq!(text.lines, vec![Line::from("The first line")]);
     }
 
     #[test]
@@ -851,44 +786,6 @@ mod tests {
         assert_eq!(iter.next(), Some(Line::from("The first line")));
         assert_eq!(iter.next(), Some(Line::from("The second line")));
         assert_eq!(iter.next(), None);
-    }
-
-    #[test]
-    fn add_line() {
-        assert_eq!(
-            Text::raw("Red").red() + Line::raw("Blue").blue(),
-            Text {
-                lines: vec![Line::raw("Red"), Line::raw("Blue").blue()],
-                style: Style::new().red(),
-                alignment: None,
-            }
-        );
-    }
-
-    #[test]
-    fn add_text() {
-        assert_eq!(
-            Text::raw("Red").red() + Text::raw("Blue").blue(),
-            Text {
-                lines: vec![Line::raw("Red"), Line::raw("Blue")],
-                style: Style::new().red(),
-                alignment: None,
-            }
-        );
-    }
-
-    #[test]
-    fn add_assign_line() {
-        let mut text = Text::raw("Red").red();
-        text += Line::raw("Blue").blue();
-        assert_eq!(
-            text,
-            Text {
-                lines: vec![Line::raw("Red"), Line::raw("Blue").blue()],
-                style: Style::new().red(),
-                alignment: None,
-            }
-        );
     }
 
     #[test]
@@ -942,12 +839,11 @@ mod tests {
         );
     }
 
-    #[rstest]
-    #[case::one_line("The first line")]
-    #[case::multiple_lines("The first line\nThe second line")]
-    fn display_raw_text(#[case] value: &str) {
-        let text = Text::raw(value);
-        assert_eq!(format!("{text}"), value);
+    #[test]
+    fn display_raw_text() {
+        let text = Text::raw("The first line\nThe second line");
+
+        assert_eq!(format!("{text}"), "The first line\nThe second line");
     }
 
     #[test]
@@ -1039,7 +935,7 @@ mod tests {
     fn push_line_empty() {
         let mut text = Text::default();
         text.push_line(Line::from("Hello, world!"));
-        assert_eq!(text.lines, [Line::from("Hello, world!")]);
+        assert_eq!(text.lines, vec![Line::from("Hello, world!")]);
     }
 
     #[test]
@@ -1061,7 +957,7 @@ mod tests {
     fn push_span_empty() {
         let mut text = Text::default();
         text.push_span(Span::raw("Hello, world!"));
-        assert_eq!(text.lines, [Line::from(Span::raw("Hello, world!"))]);
+        assert_eq!(text.lines, vec![Line::from(Span::raw("Hello, world!"))],);
     }
 
     mod widget {

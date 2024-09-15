@@ -9,21 +9,24 @@
 //! See the [examples readme] for more information on finding examples that match the version of the
 //! library you are using.
 //!
-//! [Ratatui]: https://github.com/ratatui/ratatui
-//! [examples]: https://github.com/ratatui/ratatui/blob/main/examples
-//! [examples readme]: https://github.com/ratatui/ratatui/blob/main/examples/README.md
+//! [Ratatui]: https://github.com/ratatui-org/ratatui
+//! [examples]: https://github.com/ratatui-org/ratatui/blob/main/examples
+//! [examples readme]: https://github.com/ratatui-org/ratatui/blob/main/examples/README.md
 
-use std::time::Duration;
+#![allow(clippy::enum_glob_use)]
 
-use color_eyre::Result;
+use std::{io::stdout, time::Duration};
+
+use color_eyre::{config::HookBuilder, Result};
+use crossterm::{
+    event::{self, Event, KeyCode, KeyEventKind},
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    ExecutableCommand,
+};
 use ratatui::{
-    buffer::Buffer,
-    crossterm::event::{self, Event, KeyCode, KeyEventKind},
-    layout::{Alignment, Constraint, Layout, Rect},
-    style::{palette::tailwind, Color, Style, Stylize},
-    text::Span,
-    widgets::{block::Title, Block, Borders, Gauge, Padding, Paragraph, Widget},
-    DefaultTerminal,
+    prelude::*,
+    style::palette::tailwind,
+    widgets::{Block, Borders, Gauge, Padding, Paragraph},
 };
 
 const GAUGE1_COLOR: Color = tailwind::RED.c800;
@@ -51,20 +54,25 @@ enum AppState {
 }
 
 fn main() -> Result<()> {
-    color_eyre::install()?;
-    let terminal = ratatui::init();
-    let app_result = App::default().run(terminal);
-    ratatui::restore();
-    app_result
+    init_error_hooks()?;
+    let terminal = init_terminal()?;
+    App::default().run(terminal)?;
+    restore_terminal()?;
+    Ok(())
 }
 
 impl App {
-    fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
+    fn run(&mut self, mut terminal: Terminal<impl Backend>) -> Result<()> {
         while self.state != AppState::Quitting {
-            terminal.draw(|frame| frame.render_widget(&self, frame.area()))?;
+            self.draw(&mut terminal)?;
             self.handle_events()?;
             self.update(terminal.size()?.width);
         }
+        Ok(())
+    }
+
+    fn draw(&self, terminal: &mut Terminal<impl Backend>) -> Result<()> {
+        terminal.draw(|f| f.render_widget(self, f.size()))?;
         Ok(())
     }
 
@@ -91,9 +99,10 @@ impl App {
         if event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
+                    use KeyCode::*;
                     match key.code {
-                        KeyCode::Char(' ') | KeyCode::Enter => self.start(),
-                        KeyCode::Char('q') | KeyCode::Esc => self.quit(),
+                        Char(' ') | Enter => self.start(),
+                        Char('q') | Esc => self.quit(),
                         _ => {}
                     }
                 }
@@ -114,7 +123,7 @@ impl App {
 impl Widget for &App {
     #[allow(clippy::similar_names)]
     fn render(self, area: Rect, buf: &mut Buffer) {
-        use Constraint::{Length, Min, Ratio};
+        use Constraint::*;
         let layout = Layout::vertical([Length(2), Min(0), Length(1)]);
         let [header_area, gauge_area, footer_area] = layout.areas(area);
 
@@ -196,10 +205,38 @@ impl App {
 }
 
 fn title_block(title: &str) -> Block {
-    let title = Title::from(title).alignment(Alignment::Center);
     Block::new()
+        .title_top(Line::from(title).centered())
         .borders(Borders::NONE)
-        .padding(Padding::vertical(1))
-        .title(title)
         .fg(CUSTOM_LABEL_COLOR)
+        .padding(Padding::vertical(1))
+}
+
+fn init_error_hooks() -> color_eyre::Result<()> {
+    let (panic, error) = HookBuilder::default().into_hooks();
+    let panic = panic.into_panic_hook();
+    let error = error.into_eyre_hook();
+    color_eyre::eyre::set_hook(Box::new(move |e| {
+        let _ = restore_terminal();
+        error(e)
+    }))?;
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = restore_terminal();
+        panic(info);
+    }));
+    Ok(())
+}
+
+fn init_terminal() -> color_eyre::Result<Terminal<impl Backend>> {
+    enable_raw_mode()?;
+    stdout().execute(EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout());
+    let terminal = Terminal::new(backend)?;
+    Ok(terminal)
+}
+
+fn restore_terminal() -> color_eyre::Result<()> {
+    disable_raw_mode()?;
+    stdout().execute(LeaveAlternateScreen)?;
+    Ok(())
 }

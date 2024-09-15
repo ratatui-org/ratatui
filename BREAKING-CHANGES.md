@@ -4,30 +4,12 @@ This document contains a list of breaking changes in each version and some notes
 between versions. It is compiled manually from the commit history and changelog. We also tag PRs on
 GitHub with a [breaking change] label.
 
-[breaking change]: (https://github.com/ratatui/ratatui/issues?q=label%3A%22breaking+change%22)
+[breaking change]: (https://github.com/ratatui-org/ratatui/issues?q=label%3A%22breaking+change%22)
 
 ## Summary
 
 This is a quick summary of the sections below:
 
-- [v0.28.0](#v0280)
-  ⁻ `Backend::size` returns `Size` instead of `Rect`
-  - `Backend` trait migrates to `get/set_cursor_position`
-  - Ratatui now requires Crossterm 0.28.0
-  - `Axis::labels` now accepts `IntoIterator<Into<Line>>`
-  - `Layout::init_cache` no longer returns bool and takes a `NonZeroUsize` instead of `usize`
-  - `ratatui::terminal` module is now private
-  - `ToText` no longer has a lifetime
-  - `Frame::size` is deprecated and renamed to `Frame::area`
-- [v0.27.0](#v0270)
-  - List no clamps the selected index to list
-  - Prelude items added / removed
-  - 'termion' updated to 4.0
-  - `Rect::inner` takes `Margin` directly instead of reference
-  - `Buffer::filled` takes `Cell` directly instead of reference
-  - `Stylize::bg()` now accepts `Into<Color>`
-  - Removed deprecated `List::start_corner`
-  - `LineGauge::gauge_style` is deprecated
 - [v0.26.0](#v0260)
   - `Flex::Start` is the new default flex mode for `Layout`
   - `patch_style` & `reset_style` now consume and return `Self`
@@ -65,221 +47,11 @@ This is a quick summary of the sections below:
   - MSRV is now 1.63.0
   - `List` no longer ignores empty strings
 
-## v0.28.0
-
-### `Backend::size` returns `Size` instead of `Rect` ([#1254])
-
-[#1254]: https://github.com/ratatui/ratatui/pull/1254
-
-The `Backend::size` method returns a `Size` instead of a `Rect`.
-There is no need for the position here as it was always 0,0.
-
-### `Backend` trait migrates to `get/set_cursor_position` ([#1284])
-
-[#1284]: https://github.com/ratatui/ratatui/pull/1284
-
-If you just use the types implementing the `Backend` trait, you will see deprecation hints but
-nothing is a breaking change for you.
-
-If you implement the Backend trait yourself, you need to update the implementation and add the
-`get/set_cursor_position` method. You can remove the `get/set_cursor` methods as they are deprecated
-and a default implementation for them exists.
-
-### Ratatui now requires Crossterm 0.28.0 ([#1278])
-
-[#1278]: https://github.com/ratatui/ratatui/pull/1278
-
-Crossterm is updated to version 0.28.0, which is a semver incompatible version with the previous
-version (0.27.0). Ratatui re-exports the version of crossterm that it is compatible with under
-`ratatui::crossterm`, which can be used to avoid incompatible versions in your dependency list.
-
-### `Axis::labels()` now accepts `IntoIterator<Into<Line>>` ([#1273] and [#1283])
-
-[#1273]: https://github.com/ratatui/ratatui/pull/1173
-[#1283]: https://github.com/ratatui/ratatui/pull/1283
-
-Previously Axis::labels accepted `Vec<Span>`. Any code that uses conversion methods that infer the
-type will need to be rewritten as the compiler cannot infer the correct type.
-
-```diff
-- Axis::default().labels(vec!["a".into(), "b".into()])
-+ Axis::default().labels(["a", "b"])
-```
-
-### `Layout::init_cache` no longer returns bool and takes a `NonZeroUsize` instead of `usize` ([#1245])
-
-[#1245]: https://github.com/ratatui/ratatui/pull/1245
-
-```diff
-- let is_initialized = Layout::init_cache(100);
-+ Layout::init_cache(NonZeroUsize::new(100).unwrap());
-```
-
-### `ratatui::terminal` module is now private ([#1160])
-
-[#1160]: https://github.com/ratatui/ratatui/pull/1160
-
-The `terminal` module is now private and can not be used directly. The types under this module are
-exported from the root of the crate. This reduces clashes with other modules in the backends that
-are also named terminal, and confusion about module exports for newer Rust users.
-
-```diff
-- use ratatui::terminal::{CompletedFrame, Frame, Terminal, TerminalOptions, ViewPort};
-+ use ratatui::{CompletedFrame, Frame, Terminal, TerminalOptions, ViewPort};
-```
-
-### `ToText` no longer has a lifetime ([#1234])
-
-[#1234]: https://github.com/ratatui/ratatui/pull/1234
-
-This change simplifies the trait and makes it easier to implement.
-
-### `Frame::size` is deprecated and renamed to `Frame::area`
-
-[#1293]: https://github.com/ratatui/ratatui/pull/1293
-
-`Frame::size` is renamed to `Frame::area` as it's the more correct name.
-
-## [v0.27.0](https://github.com/ratatui/ratatui/releases/tag/v0.27.0)
-
-### List no clamps the selected index to list ([#1159])
-
-[#1149]: https://github.com/ratatui/ratatui/pull/1149
-
-The `List` widget now clamps the selected index to the bounds of the list when navigating with
-`first`, `last`, `previous`, and `next`, as well as when setting the index directly with `select`.
-
-Previously selecting an index past the end of the list would show treat the list as having a
-selection which was not visible. Now the last item in the list will be selected instead.
-
-### Prelude items added / removed ([#1149])
-
-The following items have been removed from the prelude:
-
-- `style::Styled` - this trait is useful for widgets that want to
-  support the Stylize trait, but it adds complexity as widgets have two
-  `style` methods and a `set_style` method.
-- `symbols::Marker` - this item is used by code that needs to draw to
-  the `Canvas` widget, but it's not a common item that would be used by
-  most users of the library.
-- `terminal::{CompletedFrame, TerminalOptions, Viewport}` - these items
-  are rarely used by code that needs to interact with the terminal, and
-  they're generally only ever used once in any app.
-
-The following items have been added to the prelude:
-
-- `layout::{Position, Size}` - these items are used by code that needs
-  to interact with the layout system. These are newer items that were
-  added in the last few releases, which should be used more liberally.
-  This may cause conflicts for types defined elsewhere with a similar
-  name.
-
-To update your app:
-
-```diff
-// if your app uses Styled::style() or Styled::set_style():
--use ratatui::prelude::*;
-+use ratatui::{prelude::*, style::Styled};
-
-// if your app uses symbols::Marker:
--use ratatui::prelude::*;
-+use ratatui::{prelude::*, symbols::Marker}
-
-// if your app uses terminal::{CompletedFrame, TerminalOptions, Viewport}
--use ratatui::prelude::*;
-+use ratatui::{prelude::*, terminal::{CompletedFrame, TerminalOptions, Viewport}};
-
-// to disambiguate existing types named Position or Size:
-- use some_crate::{Position, Size};
-- let size: Size = ...;
-- let position: Position = ...;
-+ let size: some_crate::Size = ...;
-+ let position: some_crate::Position = ...;
-```
-
-### Termion is updated to 4.0 [#1106]
-
-Changelog: <https://gitlab.redox-os.org/redox-os/termion/-/blob/master/CHANGELOG.md>
-
-A change is only necessary if you were matching on all variants of the `MouseEvent` enum without a
-wildcard. In this case, you need to either handle the two new variants, `MouseLeft` and
-`MouseRight`, or add a wildcard.
-
-[#1106]: https://github.com/ratatui/ratatui/pull/1106
-
-### `Rect::inner` takes `Margin` directly instead of reference ([#1008])
-
-[#1008]: https://github.com/ratatui/ratatui/pull/1008
-
-`Margin` needs to be passed without reference now.
-
-```diff
--let area = area.inner(&Margin {
-+let area = area.inner(Margin {
-     vertical: 0,
-     horizontal: 2,
- });
-```
-
-### `Buffer::filled` takes `Cell` directly instead of reference ([#1148])
-
-[#1148]: https://github.com/ratatui/ratatui/pull/1148
-
-`Buffer::filled` moves the `Cell` instead of taking a reference.
-
-```diff
--Buffer::filled(area, &Cell::new("X"));
-+Buffer::filled(area, Cell::new("X"));
-```
-
-### `Stylize::bg()` now accepts `Into<Color>` ([#1103])
-
-[#1103]: https://github.com/ratatui/ratatui/pull/1103
-
-Previously, `Stylize::bg()` accepted `Color` but now accepts `Into<Color>`. This allows more
-flexible types from calling scopes, though it can break some type inference in the calling scope.
-
-### Remove deprecated `List::start_corner` and `layout::Corner` ([#759])
-
-[#759]: https://github.com/ratatui/ratatui/pull/759
-
-`List::start_corner` was deprecated in v0.25. Use `List::direction` and `ListDirection` instead.
-
-```diff
-- list.start_corner(Corner::TopLeft);
-- list.start_corner(Corner::TopRight);
-// This is not an error, BottomRight rendered top to bottom previously
-- list.start_corner(Corner::BottomRight);
-// all becomes
-+ list.direction(ListDirection::TopToBottom);
-```
-
-```diff
-- list.start_corner(Corner::BottomLeft);
-// becomes
-+ list.direction(ListDirection::BottomToTop);
-```
-
-`layout::Corner` was removed entirely.
-
-### `LineGauge::gauge_style` is deprecated ([#565])
-
-[#565]: https://github.com/ratatui/ratatui/pull/1148
-
-`LineGauge::gauge_style` is deprecated and replaced with `LineGauge::filled_style` and `LineGauge::unfilled_style`:
-
-```diff
-let gauge = LineGauge::default()
-- .gauge_style(Style::default().fg(Color::Red).bg(Color::Blue)
-+ .filled_style(Style::default().fg(Color::Green))
-+ .unfilled_style(Style::default().fg(Color::White));
-```
-
-## [v0.26.0](https://github.com/ratatui/ratatui/releases/tag/v0.26.0)
+## [v0.26.0](https://github.com/ratatui-org/ratatui/releases/tag/v0.26.0)
 
 ### `Flex::Start` is the new default flex mode for `Layout` ([#881])
 
-[#881]: https://github.com/ratatui/ratatui/pull/881
+[#881]: https://github.com/ratatui-org/ratatui/pull/881
 
 Previously, constraints would stretch to fill all available space, violating constraints if
 necessary.
@@ -300,9 +72,9 @@ existing layouts with `Flex::Start`. However, to get old behavior, use `Flex::Le
 
 ### `Table::new()` now accepts `IntoIterator<Item: Into<Row<'a>>>` ([#774])
 
-[#774]: https://github.com/ratatui/ratatui/pull/774
+[#774]: https://github.com/ratatui-org/ratatui/pull/774
 
-Previously, `Table::new()` accepted `IntoIterator<Item=Row<'a>>`. The argument change to
+Previously, `Table::new()` accepted `IntoIterator<Item=Row<'a>>`.  The argument change to
 `IntoIterator<Item: Into<Row<'a>>>`, This allows more flexible types from calling scopes, though it
 can some break type inference in the calling scope for empty containers.
 
@@ -317,9 +89,9 @@ This can be resolved either by providing an explicit type (e.g. `Vec::<Row>::new
 
 ### `Tabs::new()` now accepts `IntoIterator<Item: Into<Line<'a>>>` ([#776])
 
-[#776]: https://github.com/ratatui/ratatui/pull/776
+[#776]: https://github.com/ratatui-org/ratatui/pull/776
 
-Previously, `Tabs::new()` accepted `Vec<T>` where `T: Into<Line<'a>>`. This allows more flexible
+Previously, `Tabs::new()` accepted `Vec<T>` where `T: Into<Line<'a>>`.  This allows more flexible
 types from calling scopes, though it can break some type inference in the calling scope.
 
 This typically occurs when collecting an iterator prior to calling `Tabs::new`, and can be resolved
@@ -333,7 +105,7 @@ by removing the call to `.collect()`.
 
 ### Table::default() now sets segment_size to None and column_spacing to ([#751])
 
-[#751]: https://github.com/ratatui/ratatui/pull/751
+[#751]: https://github.com/ratatui-org/ratatui/pull/751
 
 The default() implementation of Table now sets the column_spacing field to 1 and the segment_size
 field to `SegmentSize::None`. This will affect the rendering of a small amount of apps.
@@ -343,7 +115,7 @@ To use the previous default values, call `table.segment_size(Default::default())
 
 ### `patch_style` & `reset_style` now consumes and returns `Self` ([#754])
 
-[#754]: https://github.com/ratatui/ratatui/pull/754
+[#754]: https://github.com/ratatui-org/ratatui/pull/754
 
 Previously, `patch_style` and `reset_style` in `Text`, `Line` and `Span` were using a mutable
 reference to `Self`. To be more consistent with the rest of `ratatui`, which is using fluent
@@ -360,6 +132,8 @@ The following example shows how to migrate for `Line`, but the same applies for 
 
 ### Remove deprecated `Block::title_on_bottom` ([#757])
 
+[#757]: https://github.com/ratatui-org/ratatui/pull/757
+
 `Block::title_on_bottom` was deprecated in v0.22. Use `Block::title` and `Title::position` instead.
 
 ```diff
@@ -369,7 +143,7 @@ The following example shows how to migrate for `Line`, but the same applies for 
 
 ### `Block` style methods cannot be used in a const context ([#720])
 
-[#720]: https://github.com/ratatui/ratatui/pull/720
+[#720]: https://github.com/ratatui-org/ratatui/pull/720
 
 Previously the `style()`, `border_style()` and `title_style()` methods could be used to create a
 `Block` in a constant context. These now accept `Into<Style>` instead of `Style`. These methods no
@@ -377,7 +151,7 @@ longer can be called from a constant context.
 
 ### `Line` now has a `style` field that applies to the entire line ([#708])
 
-[#708]: https://github.com/ratatui/ratatui/pull/708
+[#708]: https://github.com/ratatui-org/ratatui/pull/708
 
 Previously the style of a `Line` was stored in the `Span`s that make up the line. Now the `Line`
 itself has a `style` field, which can be set with the `Line::styled` method. Any code that creates
@@ -401,11 +175,11 @@ the `Span::style` field.
       .alignment(Alignment::Left);
 ```
 
-## [v0.25.0](https://github.com/ratatui/ratatui/releases/tag/v0.25.0)
+## [v0.25.0](https://github.com/ratatui-org/ratatui/releases/tag/v0.25.0)
 
 ### Removed `Axis::title_style` and `Buffer::set_background` ([#691])
 
-[#691]: https://github.com/ratatui/ratatui/pull/691
+[#691]: https://github.com/ratatui-org/ratatui/pull/691
 
 These items were deprecated since 0.10.
 
@@ -419,7 +193,7 @@ These items were deprecated since 0.10.
 
 ### `List::new()` now accepts `IntoIterator<Item = Into<ListItem<'a>>>` ([#672])
 
-[#672]: https://github.com/ratatui/ratatui/pull/672
+[#672]: https://github.com/ratatui-org/ratatui/pull/672
 
 Previously `List::new()` took `Into<Vec<ListItem<'a>>>`. This change will throw a compilation
 error for `IntoIterator`s with an indeterminate item (e.g. empty vecs).
@@ -434,7 +208,7 @@ E.g.
 
 ### The default `Tabs::highlight_style` is now `Style::new().reversed()` ([#635])
 
-[#635]: https://github.com/ratatui/ratatui/pull/635
+[#635]: https://github.com/ratatui-org/ratatui/pull/635
 
 Previously the default highlight style for tabs was `Style::default()`, which meant that a `Tabs`
 widget in the default configuration would not show any indication of the selected tab.
@@ -446,7 +220,7 @@ widget in the default configuration would not show any indication of the selecte
 
 ### `Table::new()` now requires specifying the widths of the columns ([#664])
 
-[#664]: https://github.com/ratatui/ratatui/pull/664
+[#664]: https://github.com/ratatui-org/ratatui/pull/664
 
 Previously `Table`s could be constructed without `widths`. In almost all cases this is an error.
 A new `widths` parameter is now mandatory on `Table::new()`. Existing code of the form:
@@ -472,7 +246,7 @@ or complex, it may be convenient to replace `Table::new` with `Table::default().
 
 ### `Table::widths()` now accepts `IntoIterator<Item = AsRef<Constraint>>` ([#663])
 
-[#663]: https://github.com/ratatui/ratatui/pull/663
+[#663]: https://github.com/ratatui-org/ratatui/pull/663
 
 Previously `Table::widths()` took a slice (`&'a [Constraint]`). This change will introduce clippy
 `needless_borrow` warnings for places where slices are passed to this method. To fix these, remove
@@ -488,7 +262,7 @@ E.g.
 
 ### Layout::new() now accepts direction and constraint parameters ([#557])
 
-[#557]: https://github.com/ratatui/ratatui/pull/557
+[#557]: https://github.com/ratatui-org/ratatui/pull/557
 
 Previously layout new took no parameters. Existing code should either use `Layout::default()` or
 the new constructor.
@@ -505,18 +279,18 @@ let layout = layout::default()
 let layout = layout::new(Direction::Vertical, [Constraint::Min(1), Constraint::Max(2)]);
 ```
 
-## [v0.24.0](https://github.com/ratatui/ratatui/releases/tag/v0.24.0)
+## [v0.24.0](https://github.com/ratatui-org/ratatui/releases/tag/v0.24.0)
 
 ### `ScrollbarState` field type changed from `u16` to `usize` ([#456])
 
-[#456]: https://github.com/ratatui/ratatui/pull/456
+[#456]: https://github.com/ratatui-org/ratatui/pull/456
 
 In order to support larger content lengths, the `position`, `content_length` and
 `viewport_content_length` methods on `ScrollbarState` now take `usize` instead of `u16`
 
 ### `BorderType::line_symbols` renamed to `border_symbols` ([#529])
 
-[#529]: https://github.com/ratatui/ratatui/issues/529
+[#529]: https://github.com/ratatui-org/ratatui/issues/529
 
 Applications can now set custom borders on a `Block` by calling `border_set()`. The
 `BorderType::line_symbols()` is renamed to `border_symbols()` and now returns a new struct
@@ -530,7 +304,7 @@ Applications can now set custom borders on a `Block` by calling `border_set()`. 
 
 ### Generic `Backend` parameter removed from `Frame` ([#530])
 
-[#530]: https://github.com/ratatui/ratatui/issues/530
+[#530]: https://github.com/ratatui-org/ratatui/issues/530
 
 `Frame` is no longer generic over Backend. Code that accepted `Frame<Backend>` will now need to
 accept `Frame`. To migrate existing code, remove any generic parameters from code that uses an
@@ -544,7 +318,7 @@ instance of a Frame. E.g.:
 
 ### `Stylize` shorthands now consume rather than borrow `String` ([#466])
 
-[#466]: https://github.com/ratatui/ratatui/issues/466
+[#466]: https://github.com/ratatui-org/ratatui/issues/466
 
 In order to support using `Stylize` shorthands (e.g. `"foo".red()`) on temporary `String` values, a
 new implementation of `Stylize` was added that returns a `Span<'static>`. This causes the value to
@@ -562,7 +336,7 @@ longer compile. E.g.
 
 ### Deprecated `Spans` type removed (replaced with `Line`) ([#426])
 
-[#426]: https://github.com/ratatui/ratatui/issues/426
+[#426]: https://github.com/ratatui-org/ratatui/issues/426
 
 `Spans` was replaced with `Line` in 0.21.0. `Buffer::set_spans` was replaced with
 `Buffer::set_line`.
@@ -575,11 +349,11 @@ longer compile. E.g.
 + buffer.set_line(0, 0, line, 10);
 ```
 
-## [v0.23.0](https://github.com/ratatui/ratatui/releases/tag/v0.23.0)
+## [v0.23.0](https://github.com/ratatui-org/ratatui/releases/tag/v0.23.0)
 
 ### `Scrollbar::track_symbol()` now takes an `Option<&str>` instead of `&str` ([#360])
 
-[#360]: https://github.com/ratatui/ratatui/issues/360
+[#360]: https://github.com/ratatui-org/ratatui/issues/360
 
 The track symbol of `Scrollbar` is now optional, this method now takes an optional value.
 
@@ -591,7 +365,7 @@ The track symbol of `Scrollbar` is now optional, this method now takes an option
 
 ### `Scrollbar` symbols moved to `symbols::scrollbar` and `widgets::scrollbar` module is private ([#330])
 
-[#330]: https://github.com/ratatui/ratatui/issues/330
+[#330]: https://github.com/ratatui-org/ratatui/issues/330
 
 The symbols for defining scrollbars have been moved to the `symbols` module from the
 `widgets::scrollbar` module which is no longer public. To update your code update any imports to the
@@ -605,31 +379,31 @@ new module locations. E.g.:
 
 ### MSRV updated to 1.67 ([#361])
 
-[#361]: https://github.com/ratatui/ratatui/issues/361
+[#361]: https://github.com/ratatui-org/ratatui/issues/361
 
 The MSRV of ratatui is now 1.67 due to an MSRV update in a dependency (`time`).
 
-## [v0.22.0](https://github.com/ratatui/ratatui/releases/tag/v0.22.0)
+## [v0.22.0](https://github.com/ratatui-org/ratatui/releases/tag/v0.22.0)
 
 ### `bitflags` updated to 2.3 ([#205])
 
-[#205]: https://github.com/ratatui/ratatui/issues/205
+[#205]: https://github.com/ratatui-org/ratatui/issues/205
 
-The `serde` representation of `bitflags` has changed. Any existing serialized types that have
-Borders or Modifiers will need to be re-serialized. This is documented in the [`bitflags`
+The `serde` representation of `bitflags` has changed. Any existing serialized types that have Borders or
+Modifiers will need to be re-serialized. This is documented in the [`bitflags`
 changelog](https://github.com/bitflags/bitflags/blob/main/CHANGELOG.md#200-rc2)..
 
-## [v0.21.0](https://github.com/ratatui/ratatui/releases/tag/v0.21.0)
+## [v0.21.0](https://github.com/ratatui-org/ratatui/releases/tag/v0.21.0)
 
 ### MSRV is 1.65.0 ([#171])
 
-[#171]: https://github.com/ratatui/ratatui/issues/171
+[#171]: https://github.com/ratatui-org/ratatui/issues/171
 
 The minimum supported rust version is now 1.65.0.
 
 ### `Terminal::with_options()` stabilized to allow configuring the viewport ([#114])
 
-[#114]: https://github.com/ratatui/ratatui/issues/114
+[#114]: https://github.com/ratatui-org/ratatui/issues/114
 
 In order to support inline viewports, the unstable method `Terminal::with_options()` was stabilized
 and `ViewPort` was changed from a struct to an enum.
@@ -646,7 +420,7 @@ let terminal = Terminal::with_options(backend, TerminalOptions {
 
 ### Code that binds `Into<Text<'a>>` now requires type annotations ([#168])
 
-[#168]: https://github.com/ratatui/ratatui/issues/168
+[#168]: https://github.com/ratatui-org/ratatui/issues/168
 
 A new type `Masked` was introduced that implements `From<Text<'a>>`. This causes any code that
 previously did not need to use type annotations to fail to compile. To fix this, annotate or call
@@ -660,7 +434,7 @@ previously did not need to use type annotations to fail to compile. To fix this,
 
 ### `Marker::Block` now renders as a block rather than a bar character ([#133])
 
-[#133]: https://github.com/ratatui/ratatui/issues/133
+[#133]: https://github.com/ratatui-org/ratatui/issues/133
 
 Code using the `Block` marker that previously rendered using a half block character (`'▀'``) now
 renders using the full block character (`'█'`). A new marker variant`Bar` is introduced to replace
@@ -672,20 +446,20 @@ the existing code.
 + let canvas = Canvas::default().marker(Marker::Bar);
 ```
 
-## [v0.20.0](https://github.com/ratatui/ratatui/releases/tag/v0.20.0)
+## [v0.20.0](https://github.com/ratatui-org/ratatui/releases/tag/v0.20.0)
 
 v0.20.0 was the first release of Ratatui - versions prior to this were release as tui-rs. See the
 [Changelog](./CHANGELOG.md) for more details.
 
 ### MSRV is update to 1.63.0 ([#80])
 
-[#80]: https://github.com/ratatui/ratatui/issues/80
+[#80]: https://github.com/ratatui-org/ratatui/issues/80
 
 The minimum supported rust version is 1.63.0
 
 ### List no longer ignores empty string in items ([#42])
 
-[#42]: https://github.com/ratatui/ratatui/issues/42
+[#42]: https://github.com/ratatui-org/ratatui/issues/42
 
 The following code now renders 3 items instead of 2. Code which relies on the previous behavior will
 need to manually filter empty items prior to display.

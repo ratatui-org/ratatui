@@ -1,24 +1,12 @@
 use std::time::Duration;
 
 use color_eyre::{eyre::Context, Result};
-use crossterm::event;
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind};
 use itertools::Itertools;
-use ratatui::{
-    buffer::Buffer,
-    crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind},
-    layout::{Constraint, Layout, Rect},
-    style::Color,
-    text::{Line, Span},
-    widgets::{Block, Tabs, Widget},
-    DefaultTerminal, Frame,
-};
+use ratatui::{prelude::*, widgets::*};
 use strum::{Display, EnumIter, FromRepr, IntoEnumIterator};
 
-use crate::{
-    destroy,
-    tabs::{AboutTab, EmailTab, RecipeTab, TracerouteTab, WeatherTab},
-    THEME,
-};
+use crate::{destroy, tabs::*, term, THEME};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct App {
@@ -49,13 +37,15 @@ enum Tab {
     Weather,
 }
 
+pub fn run(terminal: &mut Terminal<impl Backend>) -> Result<()> {
+    App::default().run(terminal)
+}
+
 impl App {
     /// Run the app until the user quits.
-    pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
+    pub fn run(&mut self, terminal: &mut Terminal<impl Backend>) -> Result<()> {
         while self.is_running() {
-            terminal
-                .draw(|frame| self.draw(frame))
-                .wrap_err("terminal.draw")?;
+            self.draw(terminal)?;
             self.handle_events()?;
         }
         Ok(())
@@ -66,11 +56,16 @@ impl App {
     }
 
     /// Draw a single frame of the app.
-    fn draw(&self, frame: &mut Frame) {
-        frame.render_widget(self, frame.area());
-        if self.mode == Mode::Destroy {
-            destroy::destroy(frame);
-        }
+    fn draw(&self, terminal: &mut Terminal<impl Backend>) -> Result<()> {
+        terminal
+            .draw(|frame| {
+                frame.render_widget(self, frame.size());
+                if self.mode == Mode::Destroy {
+                    destroy::destroy(frame);
+                }
+            })
+            .wrap_err("terminal.draw")?;
+        Ok(())
     }
 
     /// Handle events from the terminal.
@@ -79,24 +74,22 @@ impl App {
     /// 1/50th of a second. This was chosen to try to match the default frame rate of a GIF in VHS.
     fn handle_events(&mut self) -> Result<()> {
         let timeout = Duration::from_secs_f64(1.0 / 50.0);
-        if !event::poll(timeout)? {
-            return Ok(());
-        }
-        match event::read()? {
-            Event::Key(key) if key.kind == KeyEventKind::Press => self.handle_key_press(key),
+        match term::next_event(timeout)? {
+            Some(Event::Key(key)) if key.kind == KeyEventKind::Press => self.handle_key_press(key),
             _ => {}
         }
         Ok(())
     }
 
     fn handle_key_press(&mut self, key: KeyEvent) {
+        use KeyCode::*;
         match key.code {
-            KeyCode::Char('q') | KeyCode::Esc => self.mode = Mode::Quit,
-            KeyCode::Char('h') | KeyCode::Left => self.prev_tab(),
-            KeyCode::Char('l') | KeyCode::Right => self.next_tab(),
-            KeyCode::Char('k') | KeyCode::Up => self.prev(),
-            KeyCode::Char('j') | KeyCode::Down => self.next(),
-            KeyCode::Char('d') | KeyCode::Delete => self.destroy(),
+            Char('q') | Esc => self.mode = Mode::Quit,
+            Char('h') | Left => self.prev_tab(),
+            Char('l') | Right => self.next_tab(),
+            Char('k') | Up => self.prev(),
+            Char('j') | Down => self.next(),
+            Char('d') | Delete => self.destroy(),
             _ => {}
         };
     }

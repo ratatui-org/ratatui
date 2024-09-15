@@ -1,4 +1,4 @@
-#[cfg(all(not(windows), feature = "termion"))]
+#[cfg(feature = "termion")]
 #[test]
 fn backend_termion_should_only_write_diffs() -> Result<(), Box<dyn std::error::Error>> {
     use std::{fmt::Write, io::Cursor};
@@ -30,7 +30,7 @@ fn backend_termion_should_only_write_diffs() -> Result<(), Box<dyn std::error::E
     }
 
     let expected = {
-        use ratatui::termion::{color, cursor, style};
+        use termion::{color, cursor, style};
         let mut s = String::new();
         // First draw
         write!(s, "{}", cursor::Goto(1, 1))?;

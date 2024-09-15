@@ -9,31 +9,29 @@
 //! See the [examples readme] for more information on finding examples that match the version of the
 //! library you are using.
 //!
-//! [Ratatui]: https://github.com/ratatui/ratatui
-//! [examples]: https://github.com/ratatui/ratatui/blob/main/examples
-//! [examples readme]: https://github.com/ratatui/ratatui/blob/main/examples/README.md
+//! [Ratatui]: https://github.com/ratatui-org/ratatui
+//! [examples]: https://github.com/ratatui-org/ratatui/blob/main/examples
+//! [examples readme]: https://github.com/ratatui-org/ratatui/blob/main/examples/README.md
 
-use std::time::{Duration, Instant};
+#![allow(clippy::wildcard_imports)]
 
-use color_eyre::Result;
-use ratatui::{
-    crossterm::event::{self, Event, KeyCode},
-    layout::{Constraint, Layout, Rect},
-    style::{Color, Stylize},
-    symbols::Marker,
-    widgets::{
-        canvas::{Canvas, Circle, Map, MapResolution, Rectangle},
-        Block, Widget,
-    },
-    DefaultTerminal, Frame,
+use std::{
+    io::{self, stdout, Stdout},
+    time::{Duration, Instant},
 };
 
-fn main() -> Result<()> {
-    color_eyre::install()?;
-    let terminal = ratatui::init();
-    let app_result = App::new().run(terminal);
-    ratatui::restore();
-    app_result
+use crossterm::{
+    event::{self, Event, KeyCode},
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    ExecutableCommand,
+};
+use ratatui::{
+    prelude::*,
+    widgets::{canvas::*, *},
+};
+
+fn main() -> io::Result<()> {
+    App::run()
 }
 
 struct App {
@@ -66,30 +64,33 @@ impl App {
         }
     }
 
-    pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
-        let tick_rate = Duration::from_millis(16);
+    pub fn run() -> io::Result<()> {
+        let mut terminal = init_terminal()?;
+        let mut app = Self::new();
         let mut last_tick = Instant::now();
+        let tick_rate = Duration::from_millis(16);
         loop {
-            terminal.draw(|frame| self.draw(frame))?;
+            let _ = terminal.draw(|frame| app.ui(frame));
             let timeout = tick_rate.saturating_sub(last_tick.elapsed());
             if event::poll(timeout)? {
                 if let Event::Key(key) = event::read()? {
                     match key.code {
-                        KeyCode::Char('q') => break Ok(()),
-                        KeyCode::Down | KeyCode::Char('j') => self.y += 1.0,
-                        KeyCode::Up | KeyCode::Char('k') => self.y -= 1.0,
-                        KeyCode::Right | KeyCode::Char('l') => self.x += 1.0,
-                        KeyCode::Left | KeyCode::Char('h') => self.x -= 1.0,
+                        KeyCode::Char('q') => break,
+                        KeyCode::Down | KeyCode::Char('j') => app.y += 1.0,
+                        KeyCode::Up | KeyCode::Char('k') => app.y -= 1.0,
+                        KeyCode::Right | KeyCode::Char('l') => app.x += 1.0,
+                        KeyCode::Left | KeyCode::Char('h') => app.x -= 1.0,
                         _ => {}
                     }
                 }
             }
 
             if last_tick.elapsed() >= tick_rate {
-                self.on_tick();
+                app.on_tick();
                 last_tick = Instant::now();
             }
         }
+        restore_terminal()
     }
 
     fn on_tick(&mut self) {
@@ -122,11 +123,11 @@ impl App {
         self.ball.y += self.vy;
     }
 
-    fn draw(&self, frame: &mut Frame) {
+    fn ui(&self, frame: &mut Frame) {
         let horizontal =
             Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]);
         let vertical = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]);
-        let [map, right] = horizontal.areas(frame.area());
+        let [map, right] = horizontal.areas(frame.size());
         let [pong, boxes] = vertical.areas(right);
 
         frame.render_widget(self.map_canvas(), map);
@@ -136,7 +137,7 @@ impl App {
 
     fn map_canvas(&self) -> impl Widget + '_ {
         Canvas::default()
-            .block(Block::bordered().title("World"))
+            .block(Block::bordered().title_top("World"))
             .marker(self.marker)
             .paint(|ctx| {
                 ctx.draw(&Map {
@@ -151,7 +152,7 @@ impl App {
 
     fn pong_canvas(&self) -> impl Widget + '_ {
         Canvas::default()
-            .block(Block::bordered().title("Pong"))
+            .block(Block::bordered().title_top("Pong"))
             .marker(self.marker)
             .paint(|ctx| {
                 ctx.draw(&self.ball);
@@ -166,7 +167,7 @@ impl App {
         let bottom = 0.0;
         let top = f64::from(area.height).mul_add(2.0, -4.0);
         Canvas::default()
-            .block(Block::bordered().title("Rects"))
+            .block(Block::bordered().title_top("Rects"))
             .marker(self.marker)
             .x_bounds([left, right])
             .y_bounds([bottom, top])
@@ -197,4 +198,16 @@ impl App {
                 }
             })
     }
+}
+
+fn init_terminal() -> io::Result<Terminal<CrosstermBackend<Stdout>>> {
+    enable_raw_mode()?;
+    stdout().execute(EnterAlternateScreen)?;
+    Terminal::new(CrosstermBackend::new(stdout()))
+}
+
+fn restore_terminal() -> io::Result<()> {
+    disable_raw_mode()?;
+    stdout().execute(LeaveAlternateScreen)?;
+    Ok(())
 }

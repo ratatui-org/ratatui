@@ -4,18 +4,14 @@
 - [Ratatui](#ratatui)
   - [Installation](#installation)
   - [Introduction](#introduction)
-  - [Other documentation](#other-documentation)
+  - [Other Documentation](#other-documentation)
   - [Quickstart](#quickstart)
-    - [Initialize and restore the terminal](#initialize-and-restore-the-terminal)
-    - [Drawing the UI](#drawing-the-ui)
-    - [Handling events](#handling-events)
-    - [Example](#example)
-  - [Layout](#layout)
-  - [Text and styling](#text-and-styling)
   - [Status of this fork](#status-of-this-fork)
+  - [Rust version requirements](#rust-version-requirements)
   - [Widgets](#widgets)
     - [Built in](#built-in)
-    - [Third-party libraries, bootstrapping templates and widgets](#third-party-libraries-bootstrapping-templates-and-widgets)
+    - [Third\-party libraries, bootstrapping templates and
+      widgets](#third-party-libraries-bootstrapping-templates-and-widgets)
   - [Apps](#apps)
   - [Alternatives](#alternatives)
   - [Acknowledgments](#acknowledgments)
@@ -25,14 +21,14 @@
 
 <!-- cargo-rdme start -->
 
-![Demo](https://github.com/ratatui/ratatui/blob/87ae72dbc756067c97f6400d3e2a58eeb383776e/examples/demo2-destroy.gif?raw=true)
+![Demo](https://github.com/ratatui-org/ratatui/blob/1d39444e3dea6f309cf9035be2417ac711c1abc9/examples/demo2-destroy.gif?raw=true)
 
 <div align="center">
 
-[![Crate Badge]][Crate] [![Docs Badge]][API Docs] [![CI Badge]][CI Workflow] [![Deps.rs
-Badge]][Deps.rs]<br> [![Codecov Badge]][Codecov] [![License Badge]](./LICENSE) [![Sponsors
-Badge]][GitHub Sponsors]<br> [![Discord Badge]][Discord Server] [![Matrix Badge]][Matrix]
-[![Forum Badge]][Forum]<br>
+[![Crate Badge]][Crate] [![Docs Badge]][API Docs] [![CI Badge]][CI Workflow] [![License
+Badge]](./LICENSE) [![Sponsors Badge]][GitHub Sponsors]<br>
+[![Codecov Badge]][Codecov] [![Deps.rs Badge]][Deps.rs] [![Discord Badge]][Discord Server]
+[![Matrix Badge]][Matrix]<br>
 
 [Ratatui Website] · [API Docs] · [Examples] · [Changelog] · [Breaking Changes]<br>
 [Contributing] · [Report a bug] · [Request a Feature] · [Create a Pull Request]
@@ -47,10 +43,10 @@ Ratatui was forked from the [tui-rs] crate in 2023 in order to continue its deve
 
 ## Installation
 
-Add `ratatui` as a dependency to your cargo.toml:
+Add `ratatui` and `crossterm` as dependencies to your cargo.toml:
 
 ```shell
-cargo add ratatui
+cargo add ratatui crossterm
 ```
 
 Ratatui uses [Crossterm] by default as it works on most platforms. See the [Installation]
@@ -71,7 +67,6 @@ terminal user interfaces and showcases the features of Ratatui, along with a hel
 ## Other documentation
 
 - [Ratatui Website] - explains the library's concepts and provides step-by-step tutorials
-- [Ratatui Forum][Forum] - a place to ask questions and discuss the library
 - [API Docs] - the full API documentation for the library on docs.rs.
 - [Examples] - a collection of examples that demonstrate how to use the library.
 - [Contributing] - Please read this if you are interested in contributing to the project.
@@ -115,8 +110,7 @@ module] and the [Backends] section of the [Ratatui Website] for more info.
 
 The drawing logic is delegated to a closure that takes a [`Frame`] instance as argument. The
 [`Frame`] provides the size of the area to draw to and allows the app to render any [`Widget`]
-using the provided [`render_widget`] method. After this closure returns, a diff is performed and
-only the changes are drawn to the terminal. See the [Widgets] section of the [Ratatui Website]
+using the provided [`render_widget`] method. See the [Widgets] section of the [Ratatui Website]
 for more info.
 
 ### Handling events
@@ -131,18 +125,12 @@ Website] for more info. For example, if you are using [Crossterm], you can use t
 ```rust
 use std::io::{self, stdout};
 
-use ratatui::{
-    backend::CrosstermBackend,
-    crossterm::{
-        event::{self, Event, KeyCode},
-        terminal::{
-            disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
-        },
-        ExecutableCommand,
-    },
-    widgets::{Block, Paragraph},
-    Frame, Terminal,
+use crossterm::{
+    event::{self, Event, KeyCode},
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    ExecutableCommand,
 };
+use ratatui::{prelude::*, widgets::*};
 
 fn main() -> io::Result<()> {
     enable_raw_mode()?;
@@ -173,8 +161,9 @@ fn handle_events() -> io::Result<bool> {
 
 fn ui(frame: &mut Frame) {
     frame.render_widget(
-        Paragraph::new("Hello World!").block(Block::bordered().title("Greeting")),
-        frame.area(),
+        Paragraph::new("Hello World!")
+            .block(Block::bordered().title("Greeting")),
+        frame.size(),
     );
 }
 ```
@@ -191,27 +180,40 @@ area. This lets you describe a responsive terminal UI by nesting layouts. See th
 section of the [Ratatui Website] for more info.
 
 ```rust
-use ratatui::{
-    layout::{Constraint, Layout},
-    widgets::Block,
-    Frame,
-};
+use ratatui::{prelude::*, widgets::*};
 
 fn ui(frame: &mut Frame) {
-    let [title_area, main_area, status_area] = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Min(0),
-        Constraint::Length(1),
-    ])
-    .areas(frame.area());
-    let [left_area, right_area] =
-        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .areas(main_area);
+    let main_layout = Layout::new(
+        Direction::Vertical,
+        [
+            Constraint::Length(1),
+            Constraint::Min(0),
+            Constraint::Length(1),
+        ],
+    )
+    .split(frame.size());
+    frame.render_widget(
+        Block::new().borders(Borders::TOP).title("Title Bar"),
+        main_layout[0],
+    );
+    frame.render_widget(
+        Block::new().borders(Borders::TOP).title("Status Bar"),
+        main_layout[2],
+    );
 
-    frame.render_widget(Block::bordered().title("Title Bar"), title_area);
-    frame.render_widget(Block::bordered().title("Status Bar"), status_area);
-    frame.render_widget(Block::bordered().title("Left"), left_area);
-    frame.render_widget(Block::bordered().title("Right"), right_area);
+    let inner_layout = Layout::new(
+        Direction::Horizontal,
+        [Constraint::Percentage(50), Constraint::Percentage(50)],
+    )
+    .split(main_layout[1]);
+    frame.render_widget(
+        Block::bordered().title("Left"),
+        inner_layout[0],
+    );
+    frame.render_widget(
+        Block::bordered().title("Right"),
+        inner_layout[1],
+    );
 }
 ```
 
@@ -232,41 +234,48 @@ short-hand syntax to apply a style to widgets and text. See the [Styling Text] s
 [Ratatui Website] for more info.
 
 ```rust
-use ratatui::{
-    layout::{Constraint, Layout},
-    style::{Color, Modifier, Style, Stylize},
-    text::{Line, Span},
-    widgets::{Block, Paragraph},
-    Frame,
-};
+use ratatui::{prelude::*, widgets::*};
 
 fn ui(frame: &mut Frame) {
-    let areas = Layout::vertical([Constraint::Length(1); 4]).split(frame.area());
+    let areas = Layout::new(
+        Direction::Vertical,
+        [
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ],
+    )
+    .split(frame.size());
 
-    let line = Line::from(vec![
-        Span::raw("Hello "),
-        Span::styled(
-            "World",
-            Style::new()
-                .fg(Color::Green)
-                .bg(Color::White)
-                .add_modifier(Modifier::BOLD),
-        ),
-        "!".red().on_light_yellow().italic(),
-    ]);
-    frame.render_widget(line, areas[0]);
+    let span1 = Span::raw("Hello ");
+    let span2 = Span::styled(
+        "World",
+        Style::new()
+            .fg(Color::Green)
+            .bg(Color::White)
+            .add_modifier(Modifier::BOLD),
+    );
+    let span3 = "!".red().on_light_yellow().italic();
 
-    // using the short-hand syntax and implicit conversions
-    let paragraph = Paragraph::new("Hello World!".red().on_white().bold());
-    frame.render_widget(paragraph, areas[1]);
+    let line = Line::from(vec![span1, span2, span3]);
+    let text: Text = Text::from(vec![line]);
 
-    // style the whole widget instead of just the text
-    let paragraph = Paragraph::new("Hello World!").style(Style::new().red().on_white());
-    frame.render_widget(paragraph, areas[2]);
+    frame.render_widget(Paragraph::new(text), areas[0]);
+    // or using the short-hand syntax and implicit conversions
+    frame.render_widget(
+        Paragraph::new("Hello World!".red().on_white().bold()),
+        areas[1],
+    );
 
-    // use the simpler short-hand syntax
-    let paragraph = Paragraph::new("Hello World!").blue().on_yellow();
-    frame.render_widget(paragraph, areas[3]);
+    // to style the whole widget instead of just the text
+    frame.render_widget(
+        Paragraph::new("Hello World!").style(Style::new().red().on_white()),
+        areas[2],
+    );
+    // or using the short-hand syntax
+    frame.render_widget(Paragraph::new("Hello World!").blue().on_yellow(), areas[3]);
 }
 ```
 
@@ -284,21 +293,21 @@ Running this example produces the following output:
 [Handling Events]: https://ratatui.rs/concepts/event-handling/
 [Layout]: https://ratatui.rs/how-to/layout/
 [Styling Text]: https://ratatui.rs/how-to/render/style-text/
-[templates]: https://github.com/ratatui/templates/
-[Examples]: https://github.com/ratatui/ratatui/tree/main/examples/README.md
-[Report a bug]: https://github.com/ratatui/ratatui/issues/new?labels=bug&projects=&template=bug_report.md
-[Request a Feature]: https://github.com/ratatui/ratatui/issues/new?labels=enhancement&projects=&template=feature_request.md
-[Create a Pull Request]: https://github.com/ratatui/ratatui/compare
+[templates]: https://github.com/ratatui-org/templates/
+[Examples]: https://github.com/ratatui-org/ratatui/tree/main/examples/README.md
+[Report a bug]: https://github.com/ratatui-org/ratatui/issues/new?labels=bug&projects=&template=bug_report.md
+[Request a Feature]: https://github.com/ratatui-org/ratatui/issues/new?labels=enhancement&projects=&template=feature_request.md
+[Create a Pull Request]: https://github.com/ratatui-org/ratatui/compare
 [git-cliff]: https://git-cliff.org
 [Conventional Commits]: https://www.conventionalcommits.org
 [API Docs]: https://docs.rs/ratatui
-[Changelog]: https://github.com/ratatui/ratatui/blob/main/CHANGELOG.md
-[Contributing]: https://github.com/ratatui/ratatui/blob/main/CONTRIBUTING.md
-[Breaking Changes]: https://github.com/ratatui/ratatui/blob/main/BREAKING-CHANGES.md
+[Changelog]: https://github.com/ratatui-org/ratatui/blob/main/CHANGELOG.md
+[Contributing]: https://github.com/ratatui-org/ratatui/blob/main/CONTRIBUTING.md
+[Breaking Changes]: https://github.com/ratatui-org/ratatui/blob/main/BREAKING-CHANGES.md
 [FOSDEM 2024 talk]: https://www.youtube.com/watch?v=NU0q6NOLJ20
-[docsrs-hello]: https://github.com/ratatui/ratatui/blob/c3c3c289b1eb8d562afb1931adb4dc719cd48490/examples/docsrs-hello.png?raw=true
-[docsrs-layout]: https://github.com/ratatui/ratatui/blob/c3c3c289b1eb8d562afb1931adb4dc719cd48490/examples/docsrs-layout.png?raw=true
-[docsrs-styling]: https://github.com/ratatui/ratatui/blob/c3c3c289b1eb8d562afb1931adb4dc719cd48490/examples/docsrs-styling.png?raw=true
+[docsrs-hello]: https://github.com/ratatui-org/ratatui/blob/c3c3c289b1eb8d562afb1931adb4dc719cd48490/examples/docsrs-hello.png?raw=true
+[docsrs-layout]: https://github.com/ratatui-org/ratatui/blob/c3c3c289b1eb8d562afb1931adb4dc719cd48490/examples/docsrs-layout.png?raw=true
+[docsrs-styling]: https://github.com/ratatui-org/ratatui/blob/c3c3c289b1eb8d562afb1931adb4dc719cd48490/examples/docsrs-styling.png?raw=true
 [`Frame`]: terminal::Frame
 [`render_widget`]: terminal::Frame::render_widget
 [`Widget`]: widgets::Widget
@@ -317,23 +326,25 @@ Running this example produces the following output:
 [Termion]: https://crates.io/crates/termion
 [Termwiz]: https://crates.io/crates/termwiz
 [tui-rs]: https://crates.io/crates/tui
-[GitHub Sponsors]: https://github.com/sponsors/ratatui
-[Crate Badge]: https://img.shields.io/crates/v/ratatui?logo=rust&style=flat-square&logoColor=E05D44&color=E05D44
-[License Badge]: https://img.shields.io/crates/l/ratatui?style=flat-square&color=1370D3
-[CI Badge]: https://img.shields.io/github/actions/workflow/status/ratatui/ratatui/ci.yml?style=flat-square&logo=github
-[CI Workflow]: https://github.com/ratatui/ratatui/actions/workflows/ci.yml
-[Codecov Badge]: https://img.shields.io/codecov/c/github/ratatui/ratatui?logo=codecov&style=flat-square&token=BAQ8SOKEST&color=C43AC3&logoColor=C43AC3
-[Codecov]: https://app.codecov.io/gh/ratatui/ratatui
-[Deps.rs Badge]: https://deps.rs/repo/github/ratatui/ratatui/status.svg?style=flat-square
-[Deps.rs]: https://deps.rs/repo/github/ratatui/ratatui
-[Discord Badge]: https://img.shields.io/discord/1070692720437383208?label=discord&logo=discord&style=flat-square&color=1370D3&logoColor=1370D3
+[GitHub Sponsors]: https://github.com/sponsors/ratatui-org
+[Crate Badge]: https://img.shields.io/crates/v/ratatui?logo=rust&style=flat-square
+[License Badge]: https://img.shields.io/crates/l/ratatui?style=flat-square
+[CI Badge]:
+    https://img.shields.io/github/actions/workflow/status/ratatui-org/ratatui/ci.yml?style=flat-square&logo=github
+[CI Workflow]: https://github.com/ratatui-org/ratatui/actions/workflows/ci.yml
+[Codecov Badge]:
+    https://img.shields.io/codecov/c/github/ratatui-org/ratatui?logo=codecov&style=flat-square&token=BAQ8SOKEST
+[Codecov]: https://app.codecov.io/gh/ratatui-org/ratatui
+[Deps.rs Badge]: https://deps.rs/repo/github/ratatui-org/ratatui/status.svg?style=flat-square
+[Deps.rs]: https://deps.rs/repo/github/ratatui-org/ratatui
+[Discord Badge]:
+    https://img.shields.io/discord/1070692720437383208?label=discord&logo=discord&style=flat-square
 [Discord Server]: https://discord.gg/pMCEU9hNEj
-[Docs Badge]: https://img.shields.io/docsrs/ratatui?logo=rust&style=flat-square&logoColor=E05D44
-[Matrix Badge]: https://img.shields.io/matrix/ratatui-general%3Amatrix.org?style=flat-square&logo=matrix&label=Matrix&color=C43AC3
+[Docs Badge]: https://img.shields.io/docsrs/ratatui?logo=rust&style=flat-square
+[Matrix Badge]:
+    https://img.shields.io/matrix/ratatui-general%3Amatrix.org?style=flat-square&logo=matrix&label=Matrix
 [Matrix]: https://matrix.to/#/#ratatui:matrix.org
-[Forum Badge]: https://img.shields.io/discourse/likes?server=https%3A%2F%2Fforum.ratatui.rs&style=flat-square&logo=discourse&label=forum&color=C43AC3
-[Forum]: https://forum.ratatui.rs
-[Sponsors Badge]: https://img.shields.io/github/sponsors/ratatui?logo=github&style=flat-square&color=1370D3
+[Sponsors Badge]: https://img.shields.io/github/sponsors/ratatui-org?logo=github&style=flat-square
 
 <!-- cargo-rdme end -->
 
@@ -348,13 +359,16 @@ In order to organize ourselves, we currently use a [Discord server](https://disc
 feel free to join and come chat! There is also a [Matrix](https://matrix.org/) bridge available at
 [#ratatui:matrix.org](https://matrix.to/#/#ratatui:matrix.org).
 
-While we do utilize Discord for coordinating, it's not essential for contributing. We have recently
-launched the [Ratatui Forum][Forum], and our primary open-source workflow is centered around GitHub.
-For bugs and features, we rely on GitHub. Please [Report a bug], [Request a Feature] or [Create a
-Pull Request].
+While we do utilize Discord for coordinating, it's not essential for contributing.
+Our primary open-source workflow is centered around GitHub.
+For significant discussions, we rely on GitHub — please open an issue, a discussion or a PR.
 
 Please make sure you read the updated [contributing](./CONTRIBUTING.md) guidelines, especially if
 you are interested in working on a PR or issue opened in the previous repository.
+
+## Rust version requirements
+
+Since version 0.23.0, The Minimum Supported Rust Version (MSRV) of `ratatui` is 1.67.0.
 
 ## Widgets
 
@@ -391,7 +405,7 @@ be installed with `cargo install cargo-make`).
   `ratatui::text::Text`
 - [color-to-tui](https://github.com/uttarayan21/color-to-tui) — Parse hex colors to
   `ratatui::style::Color`
-- [templates](https://github.com/ratatui/templates) — Starter templates for
+- [templates](https://github.com/ratatui-org/templates) — Starter templates for
   bootstrapping a Rust TUI application with Ratatui & crossterm
 - [tui-builder](https://github.com/jkelleyrtp/tui-builder) — Batteries-included MVC framework for
   Tui-rs + Crossterm apps
@@ -415,7 +429,7 @@ be installed with `cargo install cargo-make`).
 
 ## Apps
 
-Check out [awesome-ratatui](https://github.com/ratatui/awesome-ratatui) for a curated list of
+Check out [awesome-ratatui](https://github.com/ratatui-org/awesome-ratatui) for a curated list of
 awesome apps/libraries built with `ratatui`!
 
 ## Alternatives
@@ -426,7 +440,7 @@ to build text user interfaces in Rust.
 ## Acknowledgments
 
 Special thanks to [**Pavel Fomchenkov**](https://github.com/nawok) for his work in designing **an
-awesome logo** for the ratatui project and ratatui organization.
+awesome logo** for the ratatui project and ratatui-org organization.
 
 ## License
 

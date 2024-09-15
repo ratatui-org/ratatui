@@ -1,9 +1,12 @@
-use std::{collections::VecDeque, mem};
+use std::{collections::VecDeque, vec::IntoIter};
 
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 use crate::{layout::Alignment, text::StyledGrapheme};
+
+const NBSP: &str = "\u{00a0}";
+const ZWSP: &str = "\u{200b}";
 
 /// A state machine to pack styled symbols into lines.
 /// Cannot implement it as Iterator since it yields slices of the internal buffer (need streaming
@@ -34,16 +37,11 @@ where
     /// The given, unprocessed lines
     input_lines: O,
     max_line_width: u16,
-    wrapped_lines: VecDeque<Vec<StyledGrapheme<'a>>>,
+    wrapped_lines: Option<IntoIter<Vec<StyledGrapheme<'a>>>>,
     current_alignment: Alignment,
     current_line: Vec<StyledGrapheme<'a>>,
     /// Removes the leading whitespace from lines
     trim: bool,
-
-    // These are cached allocations that hold no state across next_line invocations
-    pending_word: Vec<StyledGrapheme<'a>>,
-    pending_whitespace: VecDeque<StyledGrapheme<'a>>,
-    pending_line_pool: Vec<Vec<StyledGrapheme<'a>>>,
 }
 
 impl<'a, O, I> WordWrapper<'a, O, I>
@@ -51,143 +49,14 @@ where
     O: Iterator<Item = (I, Alignment)>,
     I: Iterator<Item = StyledGrapheme<'a>>,
 {
-    pub const fn new(lines: O, max_line_width: u16, trim: bool) -> Self {
+    pub fn new(lines: O, max_line_width: u16, trim: bool) -> Self {
         Self {
             input_lines: lines,
             max_line_width,
-            wrapped_lines: VecDeque::new(),
+            wrapped_lines: None,
             current_alignment: Alignment::Left,
             current_line: vec![],
             trim,
-
-            pending_word: Vec::new(),
-            pending_line_pool: Vec::new(),
-            pending_whitespace: VecDeque::new(),
-        }
-    }
-
-    /// Split an input line (`line_symbols`) into wrapped lines
-    /// and cache them to be emitted later
-    fn process_input(&mut self, line_symbols: impl IntoIterator<Item = StyledGrapheme<'a>>) {
-        let mut pending_line = self.pending_line_pool.pop().unwrap_or_default();
-        let mut line_width = 0;
-        let mut word_width = 0;
-        let mut whitespace_width = 0;
-        let mut non_whitespace_previous = false;
-
-        self.pending_word.clear();
-        self.pending_whitespace.clear();
-        pending_line.clear();
-
-        for grapheme in line_symbols {
-            let is_whitespace = grapheme.is_whitespace();
-            let symbol_width = grapheme.symbol.width() as u16;
-
-            // ignore symbols wider than line limit
-            if symbol_width > self.max_line_width {
-                continue;
-            }
-
-            let word_found = non_whitespace_previous && is_whitespace;
-            // current word would overflow after removing whitespace
-            let trimmed_overflow = pending_line.is_empty()
-                && self.trim
-                && word_width + symbol_width > self.max_line_width;
-            // separated whitespace would overflow on its own
-            let whitespace_overflow = pending_line.is_empty()
-                && self.trim
-                && whitespace_width + symbol_width > self.max_line_width;
-            // current full word (including whitespace) would overflow
-            let untrimmed_overflow = pending_line.is_empty()
-                && !self.trim
-                && word_width + whitespace_width + symbol_width > self.max_line_width;
-
-            // append finished segment to current line
-            if word_found || trimmed_overflow || whitespace_overflow || untrimmed_overflow {
-                if !pending_line.is_empty() || !self.trim {
-                    pending_line.extend(self.pending_whitespace.drain(..));
-                    line_width += whitespace_width;
-                }
-
-                pending_line.append(&mut self.pending_word);
-                line_width += word_width;
-
-                self.pending_whitespace.clear();
-                whitespace_width = 0;
-                word_width = 0;
-            }
-
-            // pending line fills up limit
-            let line_full = line_width >= self.max_line_width;
-            // pending word would overflow line limit
-            let pending_word_overflow = symbol_width > 0
-                && line_width + whitespace_width + word_width >= self.max_line_width;
-
-            // add finished wrapped line to remaining lines
-            if line_full || pending_word_overflow {
-                let mut remaining_width = u16::saturating_sub(self.max_line_width, line_width);
-
-                self.wrapped_lines.push_back(mem::take(&mut pending_line));
-                line_width = 0;
-
-                // remove whitespace up to the end of line
-                while let Some(grapheme) = self.pending_whitespace.front() {
-                    let width = grapheme.symbol.width() as u16;
-
-                    if width > remaining_width {
-                        break;
-                    }
-
-                    whitespace_width -= width;
-                    remaining_width -= width;
-                    self.pending_whitespace.pop_front();
-                }
-
-                // don't count first whitespace toward next word
-                if is_whitespace && self.pending_whitespace.is_empty() {
-                    continue;
-                }
-            }
-
-            // append symbol to a pending buffer
-            if is_whitespace {
-                whitespace_width += symbol_width;
-                self.pending_whitespace.push_back(grapheme);
-            } else {
-                word_width += symbol_width;
-                self.pending_word.push(grapheme);
-            }
-
-            non_whitespace_previous = !is_whitespace;
-        }
-
-        // append remaining text parts
-        if pending_line.is_empty()
-            && self.pending_word.is_empty()
-            && !self.pending_whitespace.is_empty()
-        {
-            self.wrapped_lines.push_back(vec![]);
-        }
-        if !pending_line.is_empty() || !self.trim {
-            pending_line.extend(self.pending_whitespace.drain(..));
-        }
-        pending_line.append(&mut self.pending_word);
-
-        #[allow(clippy::else_if_without_else)]
-        if !pending_line.is_empty() {
-            self.wrapped_lines.push_back(pending_line);
-        } else if pending_line.capacity() > 0 {
-            self.pending_line_pool.push(pending_line);
-        }
-        if self.wrapped_lines.is_empty() {
-            self.wrapped_lines.push_back(vec![]);
-        }
-    }
-
-    fn replace_current_line(&mut self, line: Vec<StyledGrapheme<'a>>) {
-        let cache = mem::replace(&mut self.current_line, line);
-        if cache.capacity() > 0 {
-            self.pending_line_pool.push(cache);
         }
     }
 }
@@ -203,26 +72,155 @@ where
             return None;
         }
 
-        loop {
-            // emit next cached line if present
-            if let Some(line) = self.wrapped_lines.pop_front() {
-                let line_width = line
-                    .iter()
-                    .map(|grapheme| grapheme.symbol.width() as u16)
-                    .sum();
+        let mut current_line: Option<Vec<StyledGrapheme<'a>>> = None;
+        let mut line_width: u16 = 0;
 
-                self.replace_current_line(line);
-                return Some(WrappedLine {
-                    line: &self.current_line,
-                    width: line_width,
-                    alignment: self.current_alignment,
-                });
+        // Try to repeatedly retrieve next line
+        while current_line.is_none() {
+            // Retrieve next preprocessed wrapped line
+            if let Some(line_iterator) = &mut self.wrapped_lines {
+                if let Some(line) = line_iterator.next() {
+                    line_width = line
+                        .iter()
+                        .map(|grapheme| grapheme.symbol.width())
+                        .sum::<usize>() as u16;
+                    current_line = Some(line);
+                }
             }
 
-            // otherwise, process pending wrapped lines from input
-            let (line_symbols, line_alignment) = self.input_lines.next()?;
-            self.current_alignment = line_alignment;
-            self.process_input(line_symbols);
+            // When no more preprocessed wrapped lines
+            if current_line.is_none() {
+                // Try to calculate next wrapped lines based on current whole line
+                if let Some((line_symbols, line_alignment)) = &mut self.input_lines.next() {
+                    // Save the whole line's alignment
+                    self.current_alignment = *line_alignment;
+                    let mut wrapped_lines = vec![]; // Saves the wrapped lines
+                                                    // Saves the unfinished wrapped line
+                    let (mut current_line, mut current_line_width) = (vec![], 0);
+                    // Saves the partially processed word
+                    let (mut unfinished_word, mut word_width) = (vec![], 0);
+                    // Saves the whitespaces of the partially unfinished word
+                    let (mut unfinished_whitespaces, mut whitespace_width) =
+                        (VecDeque::<StyledGrapheme>::new(), 0);
+
+                    let mut has_seen_non_whitespace = false;
+                    for StyledGrapheme { symbol, style } in line_symbols {
+                        let symbol_whitespace = symbol == ZWSP
+                            || (symbol.chars().all(&char::is_whitespace) && symbol != NBSP);
+                        let symbol_width = symbol.width() as u16;
+                        // Ignore characters wider than the total max width
+                        if symbol_width > self.max_line_width {
+                            continue;
+                        }
+
+                        // Append finished word to current line
+                        if has_seen_non_whitespace && symbol_whitespace
+                            // Append if trimmed (whitespaces removed) word would overflow
+                            || word_width + symbol_width > self.max_line_width && current_line.is_empty() && self.trim
+                            // Append if removed whitespace would overflow -> reset whitespace counting to prevent overflow
+                            || whitespace_width + symbol_width > self.max_line_width && current_line.is_empty() && self.trim
+                            // Append if complete word would overflow
+                            || word_width + whitespace_width + symbol_width > self.max_line_width && current_line.is_empty() && !self.trim
+                        {
+                            if !current_line.is_empty() || !self.trim {
+                                // Also append whitespaces if not trimming or current line is not
+                                // empty
+                                current_line.extend(
+                                    std::mem::take(&mut unfinished_whitespaces).into_iter(),
+                                );
+                                current_line_width += whitespace_width;
+                            }
+                            // Append trimmed word
+                            current_line.append(&mut unfinished_word);
+                            current_line_width += word_width;
+
+                            // Clear whitespace buffer
+                            unfinished_whitespaces.clear();
+                            whitespace_width = 0;
+                            word_width = 0;
+                        }
+
+                        // Append the unfinished wrapped line to wrapped lines if it is as wide as
+                        // max line width
+                        if current_line_width >= self.max_line_width
+                            // or if it would be too long with the current partially processed word added
+                            || current_line_width + whitespace_width + word_width >= self.max_line_width && symbol_width > 0
+                        {
+                            let mut remaining_width = (i32::from(self.max_line_width)
+                                - i32::from(current_line_width))
+                            .max(0) as u16;
+                            wrapped_lines.push(std::mem::take(&mut current_line));
+                            current_line_width = 0;
+
+                            // Remove all whitespaces till end of just appended wrapped line + next
+                            // whitespace
+                            let mut first_whitespace = unfinished_whitespaces.pop_front();
+                            while let Some(grapheme) = first_whitespace.as_ref() {
+                                let symbol_width = grapheme.symbol.width() as u16;
+                                whitespace_width -= symbol_width;
+
+                                if symbol_width > remaining_width {
+                                    break;
+                                }
+                                remaining_width -= symbol_width;
+                                first_whitespace = unfinished_whitespaces.pop_front();
+                            }
+                            // In case all whitespaces have been exhausted
+                            if symbol_whitespace && first_whitespace.is_none() {
+                                // Prevent first whitespace to count towards next word
+                                continue;
+                            }
+                        }
+
+                        // Append symbol to unfinished, partially processed word
+                        if symbol_whitespace {
+                            whitespace_width += symbol_width;
+                            unfinished_whitespaces.push_back(StyledGrapheme { symbol, style });
+                        } else {
+                            word_width += symbol_width;
+                            unfinished_word.push(StyledGrapheme { symbol, style });
+                        }
+
+                        has_seen_non_whitespace = !symbol_whitespace;
+                    }
+
+                    // Append remaining text parts
+                    if !unfinished_word.is_empty() || !unfinished_whitespaces.is_empty() {
+                        if current_line.is_empty() && unfinished_word.is_empty() {
+                            wrapped_lines.push(vec![]);
+                        } else if !self.trim || !current_line.is_empty() {
+                            current_line.extend(unfinished_whitespaces.into_iter());
+                        } else {
+                            // TODO: explain why this else branch is ok.
+                            // See clippy::else_if_without_else
+                        }
+                        current_line.append(&mut unfinished_word);
+                    }
+                    if !current_line.is_empty() {
+                        wrapped_lines.push(current_line);
+                    }
+                    if wrapped_lines.is_empty() {
+                        // Append empty line if there was nothing to wrap in the first place
+                        wrapped_lines.push(vec![]);
+                    }
+
+                    self.wrapped_lines = Some(wrapped_lines.into_iter());
+                } else {
+                    // No more whole lines available -> stop repeatedly retrieving next wrapped line
+                    break;
+                }
+            }
+        }
+
+        if let Some(line) = current_line {
+            self.current_line = line;
+            Some(WrappedLine {
+                line: &self.current_line,
+                width: line_width,
+                alignment: self.current_alignment,
+            })
+        } else {
+            None
         }
     }
 }
@@ -250,7 +248,7 @@ where
     O: Iterator<Item = (I, Alignment)>,
     I: Iterator<Item = StyledGrapheme<'a>>,
 {
-    pub const fn new(lines: O, max_line_width: u16) -> Self {
+    pub fn new(lines: O, max_line_width: u16) -> Self {
         Self {
             input_lines: lines,
             max_line_width,
@@ -338,7 +336,6 @@ fn trim_offset(src: &str, mut offset: usize) -> &str {
             break;
         }
     }
-    #[allow(clippy::string_slice)] // Is safe as it comes from UnicodeSegmentation
     &src[start..]
 }
 
@@ -434,17 +431,17 @@ mod test {
         let (line_truncator, _, _) = run_composer(Composer::LineTruncator, text, width as u16);
 
         let wrapped = vec![
-            text.get(..width).unwrap(),
-            text.get(width..width * 2).unwrap(),
-            text.get(width * 2..width * 3).unwrap(),
-            text.get(width * 3..).unwrap(),
+            &text[..width],
+            &text[width..width * 2],
+            &text[width * 2..width * 3],
+            &text[width * 3..],
         ];
         assert_eq!(
             word_wrapper, wrapped,
             "WordWrapper should detect the line cannot be broken on word boundary and \
              break it at line width limit."
         );
-        assert_eq!(line_truncator, [text.get(..width).unwrap()]);
+        assert_eq!(line_truncator, vec![&text[..width]]);
     }
 
     #[test]
@@ -474,7 +471,7 @@ mod test {
         assert_eq!(word_wrapper_single_space, word_wrapped);
         assert_eq!(word_wrapper_multi_space, word_wrapped);
 
-        assert_eq!(line_truncator, [text.get(..width).unwrap()]);
+        assert_eq!(line_truncator, vec![&text[..width]]);
     }
 
     #[test]
@@ -500,7 +497,7 @@ mod test {
             .filter(|g| g.chars().any(|c| !c.is_whitespace()))
             .collect();
         assert_eq!(word_wrapper, expected);
-        assert_eq!(line_truncator, ["a"]);
+        assert_eq!(line_truncator, vec!["a"]);
     }
 
     #[test]
@@ -511,8 +508,8 @@ mod test {
                     両端点では、";
         let (word_wrapper, _, _) = run_composer(Composer::WordWrapper { trim: true }, text, width);
         let (line_truncator, _, _) = run_composer(Composer::LineTruncator, text, width);
-        assert_eq!(word_wrapper, ["", "a", "a", "a", "a"]);
-        assert_eq!(line_truncator, ["", "a", "a"]);
+        assert_eq!(word_wrapper, vec!["", "a", "a", "a", "a"]);
+        assert_eq!(line_truncator, vec!["", "a", "a"]);
     }
 
     /// Tests `WordWrapper` with words some of which exceed line length and some not.
@@ -541,8 +538,8 @@ mod test {
         let (word_wrapper, word_wrapper_width, _) =
             run_composer(Composer::WordWrapper { trim: true }, text, width);
         let (line_truncator, _, _) = run_composer(Composer::LineTruncator, text, width);
-        assert_eq!(line_truncator, ["コンピュータ上で文字"]);
-        let wrapped = [
+        assert_eq!(line_truncator, vec!["コンピュータ上で文字"]);
+        let wrapped = vec![
             "コンピュータ上で文字",
             "を扱う場合、典型的に",
             "は文字による通信を行",
@@ -550,7 +547,7 @@ mod test {
             "は、",
         ];
         assert_eq!(word_wrapper, wrapped);
-        assert_eq!(word_wrapper_width, [width, width, width, width, 4]);
+        assert_eq!(word_wrapper_width, vec![width, width, width, width, 4]);
     }
 
     #[test]
@@ -559,8 +556,8 @@ mod test {
         let text = "AAAAAAAAAAAAAAAAAAAA    AAA";
         let (word_wrapper, _, _) = run_composer(Composer::WordWrapper { trim: true }, text, width);
         let (line_truncator, _, _) = run_composer(Composer::LineTruncator, text, width);
-        assert_eq!(word_wrapper, ["AAAAAAAAAAAAAAAAAAAA", "AAA"]);
-        assert_eq!(line_truncator, ["AAAAAAAAAAAAAAAAAAAA"]);
+        assert_eq!(word_wrapper, vec!["AAAAAAAAAAAAAAAAAAAA", "AAA",]);
+        assert_eq!(line_truncator, vec!["AAAAAAAAAAAAAAAAAAAA"]);
     }
 
     /// Tests truncation of leading whitespace.
@@ -570,8 +567,8 @@ mod test {
         let text = "                                                                     ";
         let (word_wrapper, _, _) = run_composer(Composer::WordWrapper { trim: true }, text, width);
         let (line_truncator, _, _) = run_composer(Composer::LineTruncator, text, width);
-        assert_eq!(word_wrapper, [""]);
-        assert_eq!(line_truncator, ["                    "]);
+        assert_eq!(word_wrapper, vec![""]);
+        assert_eq!(line_truncator, vec!["                    "]);
     }
 
     /// Tests an input starting with a letter, followed by spaces - some of the behaviour is
@@ -586,8 +583,8 @@ mod test {
         // after 20 of which a word break occurs (probably shouldn't). The second line break
         // discards all whitespace. The result should probably be vec!["a"] but it doesn't matter
         // that much.
-        assert_eq!(word_wrapper, ["a", ""]);
-        assert_eq!(line_truncator, ["a                   "]);
+        assert_eq!(word_wrapper, vec!["a", ""]);
+        assert_eq!(line_truncator, vec!["a                   "]);
     }
 
     #[test]
@@ -614,7 +611,7 @@ mod test {
             ]
         );
         // Odd-sized lines have a space in them.
-        assert_eq!(word_wrapper_width, [8, 20, 17, 17, 20, 4]);
+        assert_eq!(word_wrapper_width, vec![8, 20, 17, 17, 20, 4]);
     }
 
     /// Ensure words separated by nbsp are wrapped as if they were a single one.
@@ -624,15 +621,15 @@ mod test {
         let text = "AAAAAAAAAAAAAAA AAAA\u{00a0}AAA";
         let (word_wrapper, word_wrapper_widths, _) =
             run_composer(Composer::WordWrapper { trim: true }, text, width);
-        assert_eq!(word_wrapper, ["AAAAAAAAAAAAAAA", "AAAA\u{00a0}AAA"]);
-        assert_eq!(word_wrapper_widths, [15, 8]);
+        assert_eq!(word_wrapper, vec!["AAAAAAAAAAAAAAA", "AAAA\u{00a0}AAA",]);
+        assert_eq!(word_wrapper_widths, vec![15, 8]);
 
         // Ensure that if the character was a regular space, it would be wrapped differently.
         let text_space = text.replace('\u{00a0}', " ");
         let (word_wrapper_space, word_wrapper_widths, _) =
             run_composer(Composer::WordWrapper { trim: true }, text_space, width);
-        assert_eq!(word_wrapper_space, ["AAAAAAAAAAAAAAA AAAA", "AAA"]);
-        assert_eq!(word_wrapper_widths, [20, 3]);
+        assert_eq!(word_wrapper_space, vec!["AAAAAAAAAAAAAAA AAAA", "AAA",]);
+        assert_eq!(word_wrapper_widths, vec![20, 3]);
     }
 
     #[test]
@@ -640,7 +637,7 @@ mod test {
         let width = 20;
         let text = "AAAAAAAAAAAAAAAAAAAA    AAA";
         let (word_wrapper, _, _) = run_composer(Composer::WordWrapper { trim: false }, text, width);
-        assert_eq!(word_wrapper, ["AAAAAAAAAAAAAAAAAAAA", "   AAA"]);
+        assert_eq!(word_wrapper, vec!["AAAAAAAAAAAAAAAAAAAA", "   AAA",]);
     }
 
     #[test]
@@ -675,11 +672,11 @@ mod test {
     #[test]
     fn line_composer_zero_width_at_end() {
         let width = 3;
-        let line = "foo\u{200B}";
+        let line = "foo\0";
         let (word_wrapper, _, _) = run_composer(Composer::WordWrapper { trim: true }, line, width);
         let (line_truncator, _, _) = run_composer(Composer::LineTruncator, line, width);
-        assert_eq!(word_wrapper, ["foo"]);
-        assert_eq!(line_truncator, ["foo\u{200B}"]);
+        assert_eq!(word_wrapper, vec!["foo\0"]);
+        assert_eq!(line_truncator, vec!["foo\0"]);
     }
 
     #[test]
@@ -716,6 +713,6 @@ mod test {
         let width = 3;
         let line = "foo\u{200b}bar";
         let (word_wrapper, _, _) = run_composer(Composer::WordWrapper { trim: true }, line, width);
-        assert_eq!(word_wrapper, ["foo", "bar"]);
+        assert_eq!(word_wrapper, vec!["foo", "bar"]);
     }
 }

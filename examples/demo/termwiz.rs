@@ -1,16 +1,12 @@
-#![allow(dead_code)]
 use std::{
     error::Error,
     time::{Duration, Instant},
 };
 
-use ratatui::{
-    backend::TermwizBackend,
-    termwiz::{
-        input::{InputEvent, KeyCode},
-        terminal::Terminal as TermwizTerminal,
-    },
-    Terminal,
+use ratatui::prelude::*;
+use termwiz::{
+    input::{InputEvent, KeyCode},
+    terminal::Terminal as TermwizTerminal,
 };
 
 use crate::{app::App, ui};
@@ -22,12 +18,12 @@ pub fn run(tick_rate: Duration, enhanced_graphics: bool) -> Result<(), Box<dyn E
 
     // create app and run it
     let app = App::new("Termwiz Demo", enhanced_graphics);
-    let app_result = run_app(&mut terminal, app, tick_rate);
+    let res = run_app(&mut terminal, app, tick_rate);
 
     terminal.show_cursor()?;
     terminal.flush()?;
 
-    if let Err(err) = app_result {
+    if let Err(err) = res {
         println!("{err:?}");
     }
 
@@ -41,7 +37,7 @@ fn run_app(
 ) -> Result<(), Box<dyn Error>> {
     let mut last_tick = Instant::now();
     loop {
-        terminal.draw(|frame| ui::draw(frame, &mut app))?;
+        terminal.draw(|f| ui::draw(f, &mut app))?;
 
         let timeout = tick_rate.saturating_sub(last_tick.elapsed());
         if let Some(input) = terminal

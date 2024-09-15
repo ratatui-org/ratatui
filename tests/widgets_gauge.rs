@@ -19,16 +19,16 @@ fn widgets_gauge_renders() {
                 .direction(Direction::Vertical)
                 .margin(2)
                 .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-                .split(f.area());
+                .split(f.size());
 
             let gauge = Gauge::default()
-                .block(Block::bordered().title("Percentage"))
+                .block(Block::bordered().title_top("Percentage"))
                 .gauge_style(Style::default().bg(Color::Blue).fg(Color::Red))
                 .use_unicode(true)
                 .percent(43);
             f.render_widget(gauge, chunks[0]);
             let gauge = Gauge::default()
-                .block(Block::bordered().title("Ratio"))
+                .block(Block::bordered().title_top("Ratio"))
                 .gauge_style(Style::default().bg(Color::Blue).fg(Color::Red))
                 .use_unicode(true)
                 .ratio(0.511_313_934_313_1);
@@ -68,15 +68,15 @@ fn widgets_gauge_renders_no_unicode() {
                 .direction(Direction::Vertical)
                 .margin(2)
                 .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-                .split(f.area());
+                .split(f.size());
 
             let gauge = Gauge::default()
-                .block(Block::bordered().title("Percentage"))
+                .block(Block::bordered().title_top("Percentage"))
                 .percent(43)
                 .use_unicode(false);
             f.render_widget(gauge, chunks[0]);
             let gauge = Gauge::default()
-                .block(Block::bordered().title("Ratio"))
+                .block(Block::bordered().title_top("Ratio"))
                 .ratio(0.211_313_934_313_1)
                 .use_unicode(false);
             f.render_widget(gauge, chunks[1]);
@@ -105,7 +105,8 @@ fn widgets_gauge_applies_styles() {
         .draw(|f| {
             let gauge = Gauge::default()
                 .block(
-                    Block::bordered().title(Span::styled("Test", Style::default().fg(Color::Red))),
+                    Block::bordered()
+                        .title_top(Span::styled("Test", Style::default().fg(Color::Red))),
                 )
                 .gauge_style(Style::default().fg(Color::Blue).bg(Color::Red))
                 .percent(43)
@@ -115,7 +116,7 @@ fn widgets_gauge_applies_styles() {
                         .fg(Color::Green)
                         .add_modifier(Modifier::BOLD),
                 ));
-            f.render_widget(gauge, f.area());
+            f.render_widget(gauge, f.size());
         })
         .unwrap();
     let mut expected = Buffer::with_lines([
@@ -167,7 +168,7 @@ fn widgets_gauge_supports_large_labels() {
             let gauge = Gauge::default()
                 .percent(43)
                 .label("43333333333333333333333333333%");
-            f.render_widget(gauge, f.area());
+            f.render_widget(gauge, f.size());
         })
         .unwrap();
     terminal.backend().assert_buffer_lines(["4333333333"]);
@@ -180,8 +181,7 @@ fn widgets_line_gauge_renders() {
     terminal
         .draw(|f| {
             let gauge = LineGauge::default()
-                .filled_style(Style::default().fg(Color::Green))
-                .unfilled_style(Style::default().fg(Color::White))
+                .gauge_style(Style::default().fg(Color::Green).bg(Color::White))
                 .ratio(0.43);
             f.render_widget(
                 gauge,
@@ -193,8 +193,8 @@ fn widgets_line_gauge_renders() {
                 },
             );
             let gauge = LineGauge::default()
-                .block(Block::bordered().title("Gauge 2"))
-                .filled_style(Style::default().fg(Color::Green))
+                .block(Block::bordered().title_top("Gauge 2"))
+                .gauge_style(Style::default().fg(Color::Green))
                 .line_set(symbols::line::THICK)
                 .ratio(0.211_313_934_313_1);
             f.render_widget(
@@ -215,13 +215,13 @@ fn widgets_line_gauge_renders() {
         "└──────────────────┘",
     ]);
     for col in 4..10 {
-        expected[(col, 0)].set_fg(Color::Green);
+        expected.get_mut(col, 0).set_fg(Color::Green);
     }
     for col in 10..20 {
-        expected[(col, 0)].set_fg(Color::White);
+        expected.get_mut(col, 0).set_fg(Color::White);
     }
     for col in 5..7 {
-        expected[(col, 2)].set_fg(Color::Green);
+        expected.get_mut(col, 2).set_fg(Color::Green);
     }
     terminal.backend().assert_buffer(&expected);
 }

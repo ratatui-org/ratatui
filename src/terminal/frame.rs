@@ -16,7 +16,7 @@ pub struct Frame<'a> {
     ///
     /// If `None`, the cursor is hidden and its position is controlled by the backend. If `Some((x,
     /// y))`, the cursor is shown and placed at `(x, y)` after the call to `Terminal::draw()`.
-    pub(crate) cursor_position: Option<Position>,
+    pub(crate) cursor_position: Option<(u16, u16)>,
 
     /// The area of the viewport
     pub(crate) viewport_area: Rect,
@@ -42,25 +42,13 @@ pub struct CompletedFrame<'a> {
 }
 
 impl Frame<'_> {
-    /// The area of the current frame
+    /// The size of the current frame
     ///
     /// This is guaranteed not to change during rendering, so may be called multiple times.
     ///
     /// If your app listens for a resize event from the backend, it should ignore the values from
     /// the event for any calculations that are used to render the current frame and use this value
-    /// instead as this is the area of the buffer that is used to render the current frame.
-    pub const fn area(&self) -> Rect {
-        self.viewport_area
-    }
-
-    /// The area of the current frame
-    ///
-    /// This is guaranteed not to change during rendering, so may be called multiple times.
-    ///
-    /// If your app listens for a resize event from the backend, it should ignore the values from
-    /// the event for any calculations that are used to render the current frame and use this value
-    /// instead as this is the area of the buffer that is used to render the current frame.
-    #[deprecated = "use .area() as it's the more correct name"]
+    /// instead as this is the size of the buffer that is used to render the current frame.
     pub const fn size(&self) -> Rect {
         self.viewport_area
     }
@@ -95,7 +83,6 @@ impl Frame<'_> {
     /// # Example
     ///
     /// ```rust
-    /// # #[cfg(feature = "unstable-widget-ref")] {
     /// # use ratatui::{backend::TestBackend, prelude::*, widgets::Block};
     /// # let backend = TestBackend::new(5, 5);
     /// # let mut terminal = Terminal::new(backend).unwrap();
@@ -103,10 +90,9 @@ impl Frame<'_> {
     /// let block = Block::new();
     /// let area = Rect::new(0, 0, 5, 5);
     /// frame.render_widget_ref(block, area);
-    /// # }
     /// ```
     #[allow(clippy::needless_pass_by_value)]
-    #[instability::unstable(feature = "widget-ref")]
+    #[stability::unstable(feature = "widget-ref")]
     pub fn render_widget_ref<W: WidgetRef>(&mut self, widget: W, area: Rect) {
         widget.render_ref(area, self.buffer);
     }
@@ -152,7 +138,6 @@ impl Frame<'_> {
     /// # Example
     ///
     /// ```rust
-    /// # #[cfg(feature = "unstable-widget-ref")] {
     /// # use ratatui::{backend::TestBackend, prelude::*, widgets::*};
     /// # let backend = TestBackend::new(5, 5);
     /// # let mut terminal = Terminal::new(backend).unwrap();
@@ -161,10 +146,9 @@ impl Frame<'_> {
     /// let list = List::new(vec![ListItem::new("Item 1"), ListItem::new("Item 2")]);
     /// let area = Rect::new(0, 0, 5, 5);
     /// frame.render_stateful_widget_ref(list, area, &mut state);
-    /// # }
     /// ```
     #[allow(clippy::needless_pass_by_value)]
-    #[instability::unstable(feature = "widget-ref")]
+    #[stability::unstable(feature = "widget-ref")]
     pub fn render_stateful_widget_ref<W>(&mut self, widget: W, area: Rect, state: &mut W::State)
     where
         W: StatefulWidgetRef,
@@ -175,22 +159,11 @@ impl Frame<'_> {
     /// After drawing this frame, make the cursor visible and put it at the specified (x, y)
     /// coordinates. If this method is not called, the cursor will be hidden.
     ///
-    /// Note that this will interfere with calls to [`Terminal::hide_cursor`],
-    /// [`Terminal::show_cursor`], and [`Terminal::set_cursor_position`]. Pick one of the APIs and
-    /// stick with it.
-    pub fn set_cursor_position<P: Into<Position>>(&mut self, position: P) {
-        self.cursor_position = Some(position.into());
-    }
-
-    /// After drawing this frame, make the cursor visible and put it at the specified (x, y)
-    /// coordinates. If this method is not called, the cursor will be hidden.
-    ///
-    /// Note that this will interfere with calls to [`Terminal::hide_cursor`],
-    /// [`Terminal::show_cursor`], and [`Terminal::set_cursor_position`]. Pick one of the APIs and
-    /// stick with it.
-    #[deprecated = "the method set_cursor_position indicates more clearly what about the cursor to set"]
+    /// Note that this will interfere with calls to `Terminal::hide_cursor()`,
+    /// `Terminal::show_cursor()`, and `Terminal::set_cursor()`. Pick one of the APIs and stick
+    /// with it.
     pub fn set_cursor(&mut self, x: u16, y: u16) {
-        self.set_cursor_position(Position { x, y });
+        self.cursor_position = Some((x, y));
     }
 
     /// Gets the buffer that this `Frame` draws into as a mutable reference.

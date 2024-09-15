@@ -1,4 +1,4 @@
-use criterion::{criterion_group, Bencher, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, Bencher, BenchmarkId, Criterion};
 use rand::Rng;
 use ratatui::{
     buffer::Buffer,
@@ -31,7 +31,7 @@ fn sparkline(c: &mut Criterion) {
 fn render(bencher: &mut Bencher, sparkline: &Sparkline) {
     let mut buffer = Buffer::empty(Rect::new(0, 0, 200, 50));
     // We use `iter_batched` to clone the value in the setup function.
-    // See https://github.com/ratatui/ratatui/pull/377.
+    // See https://github.com/ratatui-org/ratatui/pull/377.
     bencher.iter_batched(
         || sparkline.clone(),
         |bench_sparkline| {
@@ -42,3 +42,4 @@ fn render(bencher: &mut Bencher, sparkline: &Sparkline) {
 }
 
 criterion_group!(benches, sparkline);
+criterion_main!(benches);

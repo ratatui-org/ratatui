@@ -1,3 +1,4 @@
+use self::layout::Position;
 use crate::prelude::*;
 
 /// An iterator over rows within a `Rect`.

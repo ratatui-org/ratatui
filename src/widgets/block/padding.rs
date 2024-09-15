@@ -35,14 +35,6 @@ pub struct Padding {
 }
 
 impl Padding {
-    /// `Padding` with all fields set to `0`
-    pub const ZERO: Self = Self {
-        left: 0,
-        right: 0,
-        top: 0,
-        bottom: 0,
-    };
-
     /// Creates a new `Padding` by specifying every field individually.
     ///
     /// Note: the order of the fields does not match the order of the CSS properties.
@@ -56,9 +48,13 @@ impl Padding {
     }
 
     /// Creates a `Padding` with all fields set to `0`.
-    #[deprecated = "use Padding::ZERO"]
     pub const fn zero() -> Self {
-        Self::ZERO
+        Self {
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: 0,
+        }
     }
 
     /// Creates a `Padding` with the same value for `left` and `right`.
@@ -177,6 +173,7 @@ mod tests {
 
     #[test]
     fn constructors() {
+        assert_eq!(Padding::zero(), Padding::new(0, 0, 0, 0));
         assert_eq!(Padding::horizontal(1), Padding::new(1, 1, 0, 0));
         assert_eq!(Padding::vertical(1), Padding::new(0, 0, 1, 1));
         assert_eq!(Padding::uniform(1), Padding::new(1, 1, 1, 1));
@@ -192,6 +189,7 @@ mod tests {
     const fn can_be_const() {
         const _PADDING: Padding = Padding::new(1, 1, 1, 1);
         const _UNI_PADDING: Padding = Padding::uniform(1);
+        const _NO_PADDING: Padding = Padding::zero();
         const _HORIZONTAL: Padding = Padding::horizontal(1);
         const _VERTICAL: Padding = Padding::vertical(1);
         const _PROPORTIONAL: Padding = Padding::proportional(1);

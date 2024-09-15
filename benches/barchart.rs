@@ -1,4 +1,4 @@
-use criterion::{criterion_group, Bencher, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, Bencher, BenchmarkId, Criterion};
 use rand::Rng;
 use ratatui::{
     buffer::Buffer,
@@ -59,7 +59,7 @@ fn barchart(c: &mut Criterion) {
 fn render(bencher: &mut Bencher, barchart: &BarChart) {
     let mut buffer = Buffer::empty(Rect::new(0, 0, 200, 50));
     // We use `iter_batched` to clone the value in the setup function.
-    // See https://github.com/ratatui/ratatui/pull/377.
+    // See https://github.com/ratatui-org/ratatui/pull/377.
     bencher.iter_batched(
         || barchart.clone(),
         |bench_barchart| {
@@ -70,3 +70,4 @@ fn render(bencher: &mut Bencher, barchart: &BarChart) {
 }
 
 criterion_group!(benches, barchart);
+criterion_main!(benches);

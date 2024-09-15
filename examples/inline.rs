@@ -9,64 +9,37 @@
 //! See the [examples readme] for more information on finding examples that match the version of the
 //! library you are using.
 //!
-//! [Ratatui]: https://github.com/ratatui/ratatui
-//! [examples]: https://github.com/ratatui/ratatui/blob/main/examples
-//! [examples readme]: https://github.com/ratatui/ratatui/blob/main/examples/README.md
+//! [Ratatui]: https://github.com/ratatui-org/ratatui
+//! [examples]: https://github.com/ratatui-org/ratatui/blob/main/examples
+//! [examples readme]: https://github.com/ratatui-org/ratatui/blob/main/examples/README.md
+
+#![allow(clippy::wildcard_imports)]
 
 use std::{
     collections::{BTreeMap, VecDeque},
+    error::Error,
+    io,
     sync::mpsc,
     thread,
     time::{Duration, Instant},
 };
 
-use color_eyre::Result;
 use rand::distributions::{Distribution, Uniform};
-use ratatui::{
-    backend::Backend,
-    crossterm::event,
-    layout::{Alignment, Constraint, Layout, Rect},
-    style::{Color, Modifier, Style},
-    symbols,
-    text::{Line, Span},
-    widgets::{block, Block, Gauge, LineGauge, List, ListItem, Paragraph, Widget},
-    Frame, Terminal, TerminalOptions, Viewport,
-};
-
-fn main() -> Result<()> {
-    color_eyre::install()?;
-    let mut terminal = ratatui::init_with_options(TerminalOptions {
-        viewport: Viewport::Inline(8),
-    });
-
-    let (tx, rx) = mpsc::channel();
-    input_handling(tx.clone());
-    let workers = workers(tx);
-    let mut downloads = downloads();
-
-    for w in &workers {
-        let d = downloads.next(w.id).unwrap();
-        w.tx.send(d).unwrap();
-    }
-
-    let app_result = run(&mut terminal, workers, downloads, rx);
-
-    ratatui::restore();
-
-    app_result
-}
+use ratatui::{prelude::*, widgets::*};
 
 const NUM_DOWNLOADS: usize = 10;
 
 type DownloadId = usize;
 type WorkerId = usize;
+
 enum Event {
-    Input(event::KeyEvent),
+    Input(crossterm::event::KeyEvent),
     Tick,
     Resize,
     DownloadUpdate(WorkerId, DownloadId, f64),
     DownloadDone(WorkerId, DownloadId),
 }
+
 struct Downloads {
     pending: VecDeque<Download>,
     in_progress: BTreeMap<WorkerId, DownloadInProgress>,
@@ -90,18 +63,50 @@ impl Downloads {
         }
     }
 }
+
 struct DownloadInProgress {
     id: DownloadId,
     started_at: Instant,
     progress: f64,
 }
+
 struct Download {
     id: DownloadId,
     size: usize,
 }
+
 struct Worker {
     id: WorkerId,
     tx: mpsc::Sender<Download>,
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    crossterm::terminal::enable_raw_mode()?;
+    let stdout = io::stdout();
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::with_options(
+        backend,
+        TerminalOptions {
+            viewport: Viewport::Inline(8),
+        },
+    )?;
+
+    let (tx, rx) = mpsc::channel();
+    input_handling(tx.clone());
+    let workers = workers(tx);
+    let mut downloads = downloads();
+
+    for w in &workers {
+        let d = downloads.next(w.id).unwrap();
+        w.tx.send(d).unwrap();
+    }
+
+    run_app(&mut terminal, workers, downloads, rx)?;
+
+    crossterm::terminal::disable_raw_mode()?;
+    terminal.clear()?;
+
+    Ok(())
 }
 
 fn input_handling(tx: mpsc::Sender<Event>) {
@@ -111,10 +116,10 @@ fn input_handling(tx: mpsc::Sender<Event>) {
         loop {
             // poll for tick rate duration, if no events, sent tick event.
             let timeout = tick_rate.saturating_sub(last_tick.elapsed());
-            if event::poll(timeout).unwrap() {
-                match event::read().unwrap() {
-                    event::Event::Key(key) => tx.send(Event::Input(key)).unwrap(),
-                    event::Event::Resize(_, _) => tx.send(Event::Resize).unwrap(),
+            if crossterm::event::poll(timeout).unwrap() {
+                match crossterm::event::read().unwrap() {
+                    crossterm::event::Event::Key(key) => tx.send(Event::Input(key)).unwrap(),
+                    crossterm::event::Event::Resize(_, _) => tx.send(Event::Resize).unwrap(),
                     _ => {}
                 };
             }
@@ -167,22 +172,22 @@ fn downloads() -> Downloads {
 }
 
 #[allow(clippy::needless_pass_by_value)]
-fn run(
-    terminal: &mut Terminal<impl Backend>,
+fn run_app<B: Backend>(
+    terminal: &mut Terminal<B>,
     workers: Vec<Worker>,
     mut downloads: Downloads,
     rx: mpsc::Receiver<Event>,
-) -> Result<()> {
+) -> Result<(), Box<dyn Error>> {
     let mut redraw = true;
     loop {
         if redraw {
-            terminal.draw(|frame| draw(frame, &downloads))?;
+            terminal.draw(|f| ui(f, &downloads))?;
         }
         redraw = true;
 
         match rx.recv()? {
             Event::Input(event) => {
-                if event.code == event::KeyCode::Char('q') {
+                if event.code == crossterm::event::KeyCode::Char('q') {
                     break;
                 }
             }
@@ -228,11 +233,11 @@ fn run(
     Ok(())
 }
 
-fn draw(frame: &mut Frame, downloads: &Downloads) {
-    let area = frame.area();
+fn ui(f: &mut Frame, downloads: &Downloads) {
+    let area = f.size();
 
-    let block = Block::new().title(block::Title::from("Progress").alignment(Alignment::Center));
-    frame.render_widget(block, area);
+    let block = Block::new().title_top(Line::from("Progress").alignment(Alignment::Center));
+    f.render_widget(block, area);
 
     let vertical = Layout::vertical([Constraint::Length(2), Constraint::Length(4)]).margin(1);
     let horizontal = Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)]);
@@ -243,10 +248,10 @@ fn draw(frame: &mut Frame, downloads: &Downloads) {
     let done = NUM_DOWNLOADS - downloads.pending.len() - downloads.in_progress.len();
     #[allow(clippy::cast_precision_loss)]
     let progress = LineGauge::default()
-        .filled_style(Style::default().fg(Color::Blue))
+        .gauge_style(Style::default().fg(Color::Blue))
         .label(format!("{done}/{NUM_DOWNLOADS}"))
         .ratio(done as f64 / NUM_DOWNLOADS as f64);
-    frame.render_widget(progress, progress_area);
+    f.render_widget(progress, progress_area);
 
     // in progress downloads
     let items: Vec<ListItem> = downloads
@@ -269,7 +274,7 @@ fn draw(frame: &mut Frame, downloads: &Downloads) {
         })
         .collect();
     let list = List::new(items);
-    frame.render_widget(list, list_area);
+    f.render_widget(list, list_area);
 
     #[allow(clippy::cast_possible_truncation)]
     for (i, (_, download)) in downloads.in_progress.iter().enumerate() {
@@ -279,7 +284,7 @@ fn draw(frame: &mut Frame, downloads: &Downloads) {
         if gauge_area.top().saturating_add(i as u16) > area.bottom() {
             continue;
         }
-        frame.render_widget(
+        f.render_widget(
             gauge,
             Rect {
                 x: gauge_area.left(),

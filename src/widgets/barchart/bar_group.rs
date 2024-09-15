@@ -78,8 +78,7 @@ impl<'a> From<&[(&'a str, u64)]> for BarGroup<'a> {
 
 impl<'a, const N: usize> From<&[(&'a str, u64); N]> for BarGroup<'a> {
     fn from(value: &[(&'a str, u64); N]) -> Self {
-        let value: &[(&'a str, u64)] = value.as_ref();
-        Self::from(value)
+        Self::from(value.as_ref())
     }
 }
 

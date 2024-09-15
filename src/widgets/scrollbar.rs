@@ -3,7 +3,8 @@
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
     clippy::cast_sign_loss,
-    clippy::module_name_repetitions
+    clippy::module_name_repetitions,
+    clippy::wildcard_imports
 )]
 
 use std::iter;
@@ -11,10 +12,7 @@ use std::iter;
 use strum::{Display, EnumString};
 use unicode_width::UnicodeWidthStr;
 
-use crate::{
-    prelude::*,
-    symbols::scrollbar::{Set, DOUBLE_HORIZONTAL, DOUBLE_VERTICAL},
-};
+use crate::{prelude::*, symbols::scrollbar::*};
 
 /// A widget to display a scrollbar
 ///
@@ -59,13 +57,13 @@ use crate::{
 ///
 /// let mut scrollbar_state = ScrollbarState::new(items.len()).position(vertical_scroll);
 ///
-/// let area = frame.area();
+/// let area = frame.size();
 /// // Note we render the paragraph
 /// frame.render_widget(paragraph, area);
 /// // and the scrollbar, those are separate widgets
 /// frame.render_stateful_widget(
 ///     scrollbar,
-///     area.inner(Margin {
+///     area.inner(&Margin {
 ///         // using an inner vertical margin of 1 unit makes the scrollbar inside the block
 ///         vertical: 1,
 ///         horizontal: 0,
@@ -134,7 +132,7 @@ pub enum ScrollbarOrientation {
 ///
 /// If you don't have multi-line content, you can leave the `viewport_content_length` set to the
 /// default and it'll use the track size as a `viewport_content_length`.
-#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ScrollbarState {
     /// The total length of the scrollable content.
@@ -390,6 +388,12 @@ impl<'a> Scrollbar<'a> {
         self.begin_style = style;
         self.end_style = style;
         self
+    }
+}
+
+impl Default for ScrollbarState {
+    fn default() -> Self {
+        Self::new(0)
     }
 }
 
@@ -1015,7 +1019,7 @@ mod tests {
         assert_eq!(buffer, Buffer::with_lines([expected]));
     }
 
-    /// Fixes <https://github.com/ratatui/ratatui/pull/959> which was a bug that would not
+    /// Fixes <https://github.com/ratatui-org/ratatui/pull/959> which was a bug that would not
     /// render a thumb when the viewport was very small in comparison to the content length.
     #[rstest]
     #[case::position_0("#----", 0, 100)]

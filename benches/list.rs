@@ -1,4 +1,4 @@
-use criterion::{criterion_group, BatchSize, Bencher, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BatchSize, Bencher, BenchmarkId, Criterion};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -45,7 +45,7 @@ fn list(c: &mut Criterion) {
 fn render(bencher: &mut Bencher, list: &List) {
     let mut buffer = Buffer::empty(Rect::new(0, 0, 200, 50));
     // We use `iter_batched` to clone the value in the setup function.
-    // See https://github.com/ratatui/ratatui/pull/377.
+    // See https://github.com/ratatui-org/ratatui/pull/377.
     bencher.iter_batched(
         || list.to_owned(),
         |bench_list| {
@@ -59,7 +59,7 @@ fn render(bencher: &mut Bencher, list: &List) {
 fn render_stateful(bencher: &mut Bencher, list: &List, mut state: ListState) {
     let mut buffer = Buffer::empty(Rect::new(0, 0, 200, 50));
     // We use `iter_batched` to clone the value in the setup function.
-    // See https://github.com/ratatui/ratatui/pull/377.
+    // See https://github.com/ratatui-org/ratatui/pull/377.
     bencher.iter_batched(
         || list.to_owned(),
         |bench_list| {
@@ -70,3 +70,4 @@ fn render_stateful(bencher: &mut Bencher, list: &List, mut state: ListState) {
 }
 
 criterion_group!(benches, list);
+criterion_main!(benches);

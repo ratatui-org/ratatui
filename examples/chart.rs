@@ -9,38 +9,25 @@
 //! See the [examples readme] for more information on finding examples that match the version of the
 //! library you are using.
 //!
-//! [Ratatui]: https://github.com/ratatui/ratatui
-//! [examples]: https://github.com/ratatui/ratatui/blob/main/examples
-//! [examples readme]: https://github.com/ratatui/ratatui/blob/main/examples/README.md
+//! [Ratatui]: https://github.com/ratatui-org/ratatui
+//! [examples]: https://github.com/ratatui-org/ratatui/blob/main/examples
+//! [examples readme]: https://github.com/ratatui-org/ratatui/blob/main/examples/README.md
 
-use std::time::{Duration, Instant};
-
-use color_eyre::Result;
-use ratatui::{
-    crossterm::event::{self, Event, KeyCode},
-    layout::{Alignment, Constraint, Layout, Rect},
-    style::{Color, Modifier, Style, Stylize},
-    symbols::{self, Marker},
-    text::Span,
-    widgets::{block::Title, Axis, Block, Chart, Dataset, GraphType, LegendPosition},
-    DefaultTerminal, Frame,
+use std::{
+    error::Error,
+    io,
+    time::{Duration, Instant},
 };
 
-fn main() -> Result<()> {
-    color_eyre::install()?;
-    let terminal = ratatui::init();
-    let app_result = App::new().run(terminal);
-    ratatui::restore();
-    app_result
-}
-
-struct App {
-    signal1: SinSignal,
-    data1: Vec<(f64, f64)>,
-    signal2: SinSignal,
-    data2: Vec<(f64, f64)>,
-    window: [f64; 2],
-}
+use crossterm::{
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use ratatui::{
+    prelude::*,
+    widgets::{Axis, Block, Chart, Dataset, GraphType, LegendPosition},
+};
 
 #[derive(Clone)]
 struct SinSignal {
@@ -70,6 +57,14 @@ impl Iterator for SinSignal {
     }
 }
 
+struct App {
+    signal1: SinSignal,
+    data1: Vec<(f64, f64)>,
+    signal2: SinSignal,
+    data2: Vec<(f64, f64)>,
+    window: [f64; 2],
+}
+
 impl App {
     fn new() -> Self {
         let mut signal1 = SinSignal::new(0.2, 3.0, 18.0);
@@ -85,27 +80,6 @@ impl App {
         }
     }
 
-    fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
-        let tick_rate = Duration::from_millis(250);
-        let mut last_tick = Instant::now();
-        loop {
-            terminal.draw(|frame| self.draw(frame))?;
-
-            let timeout = tick_rate.saturating_sub(last_tick.elapsed());
-            if event::poll(timeout)? {
-                if let Event::Key(key) = event::read()? {
-                    if key.code == KeyCode::Char('q') {
-                        return Ok(());
-                    }
-                }
-            }
-            if last_tick.elapsed() >= tick_rate {
-                self.on_tick();
-                last_tick = Instant::now();
-            }
-        }
-    }
-
     fn on_tick(&mut self) {
         self.data1.drain(0..5);
         self.data1.extend(self.signal1.by_ref().take(5));
@@ -116,111 +90,120 @@ impl App {
         self.window[0] += 1.0;
         self.window[1] += 1.0;
     }
+}
 
-    fn draw(&self, frame: &mut Frame) {
-        let [top, bottom] = Layout::vertical([Constraint::Fill(1); 2]).areas(frame.area());
-        let [animated_chart, bar_chart] =
-            Layout::horizontal([Constraint::Fill(1), Constraint::Length(29)]).areas(top);
-        let [line_chart, scatter] = Layout::horizontal([Constraint::Fill(1); 2]).areas(bottom);
+fn main() -> Result<(), Box<dyn Error>> {
+    // setup terminal
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
 
-        self.render_animated_chart(frame, animated_chart);
-        render_barchart(frame, bar_chart);
-        render_line_chart(frame, line_chart);
-        render_scatter(frame, scatter);
+    // create app and run it
+    let tick_rate = Duration::from_millis(250);
+    let app = App::new();
+    let res = run_app(&mut terminal, app, tick_rate);
+
+    // restore terminal
+    disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
+    terminal.show_cursor()?;
+
+    if let Err(err) = res {
+        println!("{err:?}");
     }
 
-    fn render_animated_chart(&self, frame: &mut Frame, area: Rect) {
-        let x_labels = vec![
-            Span::styled(
-                format!("{}", self.window[0]),
-                Style::default().add_modifier(Modifier::BOLD),
-            ),
-            Span::raw(format!("{}", (self.window[0] + self.window[1]) / 2.0)),
-            Span::styled(
-                format!("{}", self.window[1]),
-                Style::default().add_modifier(Modifier::BOLD),
-            ),
-        ];
-        let datasets = vec![
-            Dataset::default()
-                .name("data2")
-                .marker(symbols::Marker::Dot)
-                .style(Style::default().fg(Color::Cyan))
-                .data(&self.data1),
-            Dataset::default()
-                .name("data3")
-                .marker(symbols::Marker::Braille)
-                .style(Style::default().fg(Color::Yellow))
-                .data(&self.data2),
-        ];
+    Ok(())
+}
 
-        let chart = Chart::new(datasets)
-            .block(Block::bordered())
-            .x_axis(
-                Axis::default()
-                    .title("X Axis")
-                    .style(Style::default().fg(Color::Gray))
-                    .labels(x_labels)
-                    .bounds(self.window),
-            )
-            .y_axis(
-                Axis::default()
-                    .title("Y Axis")
-                    .style(Style::default().fg(Color::Gray))
-                    .labels(["-20".bold(), "0".into(), "20".bold()])
-                    .bounds([-20.0, 20.0]),
-            );
+fn run_app<B: Backend>(
+    terminal: &mut Terminal<B>,
+    mut app: App,
+    tick_rate: Duration,
+) -> io::Result<()> {
+    let mut last_tick = Instant::now();
+    loop {
+        terminal.draw(|f| ui(f, &app))?;
 
-        frame.render_widget(chart, area);
+        let timeout = tick_rate.saturating_sub(last_tick.elapsed());
+        if crossterm::event::poll(timeout)? {
+            if let Event::Key(key) = event::read()? {
+                if key.code == KeyCode::Char('q') {
+                    return Ok(());
+                }
+            }
+        }
+        if last_tick.elapsed() >= tick_rate {
+            app.on_tick();
+            last_tick = Instant::now();
+        }
     }
 }
 
-fn render_barchart(frame: &mut Frame, bar_chart: Rect) {
-    let dataset = Dataset::default()
-        .marker(symbols::Marker::HalfBlock)
-        .style(Style::new().fg(Color::Blue))
-        .graph_type(GraphType::Bar)
-        // a bell curve
-        .data(&[
-            (0., 0.4),
-            (10., 2.9),
-            (20., 13.5),
-            (30., 41.1),
-            (40., 80.1),
-            (50., 100.0),
-            (60., 80.1),
-            (70., 41.1),
-            (80., 13.5),
-            (90., 2.9),
-            (100., 0.4),
-        ]);
+fn ui(frame: &mut Frame, app: &App) {
+    let area = frame.size();
 
-    let chart = Chart::new(vec![dataset])
-        .block(
-            Block::bordered().title(
-                Title::default()
-                    .content("Bar chart".cyan().bold())
-                    .alignment(Alignment::Center),
-            ),
-        )
+    let vertical = Layout::vertical([Constraint::Percentage(40), Constraint::Percentage(60)]);
+    let horizontal = Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]);
+    let [chart1, bottom] = vertical.areas(area);
+    let [line_chart, scatter] = horizontal.areas(bottom);
+
+    render_chart1(frame, chart1, app);
+    render_line_chart(frame, line_chart);
+    render_scatter(frame, scatter);
+}
+
+fn render_chart1(f: &mut Frame, area: Rect, app: &App) {
+    let x_labels = vec![
+        Span::styled(
+            format!("{}", app.window[0]),
+            Style::default().add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(format!("{}", (app.window[0] + app.window[1]) / 2.0)),
+        Span::styled(
+            format!("{}", app.window[1]),
+            Style::default().add_modifier(Modifier::BOLD),
+        ),
+    ];
+    let datasets = vec![
+        Dataset::default()
+            .name("data2")
+            .marker(symbols::Marker::Dot)
+            .style(Style::default().fg(Color::Cyan))
+            .data(&app.data1),
+        Dataset::default()
+            .name("data3")
+            .marker(symbols::Marker::Braille)
+            .style(Style::default().fg(Color::Yellow))
+            .data(&app.data2),
+    ];
+
+    let chart = Chart::new(datasets)
+        .block(Block::bordered().title_top("Chart 1".cyan().bold()))
         .x_axis(
             Axis::default()
-                .style(Style::default().gray())
-                .bounds([0.0, 100.0])
-                .labels(["0".bold(), "50".into(), "100.0".bold()]),
+                .title("X Axis")
+                .style(Style::default().fg(Color::Gray))
+                .labels(x_labels)
+                .bounds(app.window),
         )
         .y_axis(
             Axis::default()
-                .style(Style::default().gray())
-                .bounds([0.0, 100.0])
-                .labels(["0".bold(), "50".into(), "100.0".bold()]),
-        )
-        .hidden_legend_constraints((Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)));
+                .title("Y Axis")
+                .style(Style::default().fg(Color::Gray))
+                .labels(vec!["-20".bold(), "0".into(), "20".bold()])
+                .bounds([-20.0, 20.0]),
+        );
 
-    frame.render_widget(chart, bar_chart);
+    f.render_widget(chart, area);
 }
 
-fn render_line_chart(frame: &mut Frame, area: Rect) {
+fn render_line_chart(f: &mut Frame, area: Rect) {
     let datasets = vec![Dataset::default()
         .name("Line from only 2 points".italic())
         .marker(symbols::Marker::Braille)
@@ -229,34 +212,28 @@ fn render_line_chart(frame: &mut Frame, area: Rect) {
         .data(&[(1., 1.), (4., 4.)])];
 
     let chart = Chart::new(datasets)
-        .block(
-            Block::bordered().title(
-                Title::default()
-                    .content("Line chart".cyan().bold())
-                    .alignment(Alignment::Center),
-            ),
-        )
+        .block(Block::bordered().title_top(Line::from("Line chart".cyan().bold()).centered()))
         .x_axis(
             Axis::default()
                 .title("X Axis")
                 .style(Style::default().gray())
                 .bounds([0.0, 5.0])
-                .labels(["0".bold(), "2.5".into(), "5.0".bold()]),
+                .labels(vec!["0".bold(), "2.5".into(), "5.0".bold()]),
         )
         .y_axis(
             Axis::default()
                 .title("Y Axis")
                 .style(Style::default().gray())
                 .bounds([0.0, 5.0])
-                .labels(["0".bold(), "2.5".into(), "5.0".bold()]),
+                .labels(vec!["0".bold(), "2.5".into(), "5.0".bold()]),
         )
         .legend_position(Some(LegendPosition::TopLeft))
         .hidden_legend_constraints((Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)));
 
-    frame.render_widget(chart, area);
+    f.render_widget(chart, area);
 }
 
-fn render_scatter(frame: &mut Frame, area: Rect) {
+fn render_scatter(f: &mut Frame, area: Rect) {
     let datasets = vec![
         Dataset::default()
             .name("Heavy")
@@ -279,30 +256,24 @@ fn render_scatter(frame: &mut Frame, area: Rect) {
     ];
 
     let chart = Chart::new(datasets)
-        .block(
-            Block::bordered().title(
-                Title::default()
-                    .content("Scatter chart".cyan().bold())
-                    .alignment(Alignment::Center),
-            ),
-        )
+        .block(Block::bordered().title_top(Line::from("Scatter chart".cyan().bold()).centered()))
         .x_axis(
             Axis::default()
                 .title("Year")
                 .bounds([1960., 2020.])
                 .style(Style::default().fg(Color::Gray))
-                .labels(["1960", "1990", "2020"]),
+                .labels(vec!["1960".into(), "1990".into(), "2020".into()]),
         )
         .y_axis(
             Axis::default()
                 .title("Cost")
                 .bounds([0., 75000.])
                 .style(Style::default().fg(Color::Gray))
-                .labels(["0", "37 500", "75 000"]),
+                .labels(vec!["0".into(), "37 500".into(), "75 000".into()]),
         )
         .hidden_legend_constraints((Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)));
 
-    frame.render_widget(chart, area);
+    f.render_widget(chart, area);
 }
 
 // Data from https://ourworldindata.org/space-exploration-satellites

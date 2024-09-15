@@ -1,7 +1,6 @@
 use std::fmt;
 
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Margin {
     pub horizontal: u16,
     pub vertical: u16,

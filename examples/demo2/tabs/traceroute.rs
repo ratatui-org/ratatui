@@ -1,14 +1,7 @@
 use itertools::Itertools;
 use ratatui::{
-    buffer::Buffer,
-    layout::{Alignment, Constraint, Layout, Margin, Rect},
-    style::{Styled, Stylize},
-    symbols::Marker,
-    widgets::{
-        canvas::{self, Canvas, Map, MapResolution, Points},
-        Block, BorderType, Clear, Padding, Row, Scrollbar, ScrollbarOrientation, ScrollbarState,
-        Sparkline, StatefulWidget, Table, TableState, Widget,
-    },
+    prelude::*,
+    widgets::{canvas::*, *},
 };
 
 use crate::{RgbSwatch, THEME};
@@ -33,7 +26,7 @@ impl TracerouteTab {
 impl Widget for TracerouteTab {
     fn render(self, area: Rect, buf: &mut Buffer) {
         RgbSwatch.render(area, buf);
-        let area = area.inner(Margin {
+        let area = area.inner(&Margin {
             vertical: 1,
             horizontal: 2,
         });
@@ -52,11 +45,14 @@ impl Widget for TracerouteTab {
 
 fn render_hops(selected_row: usize, area: Rect, buf: &mut Buffer) {
     let mut state = TableState::default().with_selected(Some(selected_row));
-    let rows = HOPS.iter().map(|hop| Row::new(vec![hop.host, hop.address]));
+    let rows = HOPS
+        .iter()
+        .map(|hop| Row::new(vec![hop.host, hop.address]))
+        .collect_vec();
     let block = Block::new()
-        .padding(Padding::new(1, 1, 1, 1))
+        .title_top("Traceroute bad.horse".bold().white())
         .title_alignment(Alignment::Center)
-        .title("Traceroute bad.horse".bold().white());
+        .padding(Padding::new(1, 1, 1, 1));
     StatefulWidget::render(
         Table::new(rows, [Constraint::Max(100), Constraint::Length(15)])
             .header(Row::new(vec!["Host", "Address"]).set_style(THEME.traceroute.header))
@@ -95,7 +91,7 @@ pub fn render_ping(progress: usize, area: Rect, buf: &mut Buffer) {
     Sparkline::default()
         .block(
             Block::new()
-                .title("Ping")
+                .title_top("Ping")
                 .title_alignment(Alignment::Center)
                 .border_type(BorderType::Thick),
         )
@@ -108,7 +104,7 @@ fn render_map(selected_row: usize, area: Rect, buf: &mut Buffer) {
     let theme = THEME.traceroute.map;
     let path: Option<(&Hop, &Hop)> = HOPS.iter().tuple_windows().nth(selected_row);
     let map = Map {
-        resolution: MapResolution::High,
+        resolution: canvas::MapResolution::High,
         color: theme.color,
     };
     Canvas::default()

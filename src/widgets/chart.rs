@@ -1,11 +1,11 @@
-use std::{cmp::max, ops::Not};
+use std::cmp::max;
 
 use strum::{Display, EnumString};
+use unicode_width::UnicodeWidthStr;
 
 use crate::{
     layout::Flex,
     prelude::*,
-    style::Styled,
     widgets::{
         canvas::{Canvas, Line as CanvasLine, Points},
         Block,
@@ -30,7 +30,7 @@ use crate::{
 ///     .title("X Axis")
 ///     .style(Style::default().gray())
 ///     .bounds([0.0, 50.0])
-///     .labels(["0".bold(), "25".into(), "50".bold()]);
+///     .labels(vec!["0".bold(), "25".into(), "50".bold()]);
 /// ```
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Axis<'a> {
@@ -39,7 +39,7 @@ pub struct Axis<'a> {
     /// Bounds for the axis (all data points outside these limits will not be represented)
     bounds: [f64; 2],
     /// A list of labels to put to the left or below the axis
-    labels: Vec<Line<'a>>,
+    labels: Option<Vec<Span<'a>>>,
     /// The style used to draw the axis itself
     style: Style,
     /// The alignment of the labels of the Axis
@@ -82,12 +82,7 @@ impl<'a> Axis<'a> {
     /// more than 3 labels is currently broken and the middle labels won't be in the correct
     /// position, see [issue 334].
     ///
-    /// [issue 334]: https://github.com/ratatui/ratatui/issues/334
-    ///
-    /// `labels` is a vector of any type that can be converted into a [`Line`] (e.g. `&str`,
-    /// `String`, `&Line`, `Span`, ...). This allows you to style the labels using the methods
-    /// provided by [`Line`]. Any alignment set on the labels will be ignored as the alignment is
-    /// determined by the axis.
+    /// [issue 334]: https://github.com/ratatui-org/ratatui/issues/334
     ///
     /// This is a fluent setter method which must be chained or used as it consumes self
     ///
@@ -95,17 +90,14 @@ impl<'a> Axis<'a> {
     ///
     /// ```rust
     /// # use ratatui::{prelude::*, widgets::*};
-    /// let axis = Axis::default()
-    ///     .bounds([0.0, 50.0])
-    ///     .labels(["0".bold(), "25".into(), "50".bold()]);
+    /// let axis =
+    ///     Axis::default()
+    ///         .bounds([0.0, 50.0])
+    ///         .labels(vec!["0".bold(), "25".into(), "50".bold()]);
     /// ```
     #[must_use = "method moves the value of self and returns the modified value"]
-    pub fn labels<Labels>(mut self, labels: Labels) -> Self
-    where
-        Labels: IntoIterator,
-        Labels::Item: Into<Line<'a>>,
-    {
-        self.labels = labels.into_iter().map(Into::into).collect();
+    pub fn labels(mut self, labels: Vec<Span<'a>>) -> Self {
+        self.labels = Some(labels);
         self
     }
 
@@ -151,15 +143,11 @@ pub enum GraphType {
     /// Draw each point. This is the default.
     #[default]
     Scatter,
-
     /// Draw a line between each following point.
     ///
     /// The order of the lines will be the same as the order of the points in the dataset, which
     /// allows this widget to draw lines both left-to-right and right-to-left
     Line,
-
-    /// Draw a bar chart. This will draw a bar for each point in the dataset.
-    Bar,
 }
 
 /// Allow users to specify the position of a legend in a [`Chart`]
@@ -297,7 +285,7 @@ impl LegendPosition {
 /// This example draws a red line between two points.
 ///
 /// ```rust
-/// use ratatui::{prelude::*, symbols::Marker, widgets::*};
+/// use ratatui::{prelude::*, widgets::*};
 ///
 /// let dataset = Dataset::default()
 ///     .name("dataset 1")
@@ -373,10 +361,9 @@ impl<'a> Dataset<'a> {
 
     /// Sets how the dataset should be drawn
     ///
-    /// [`Chart`] can draw [scatter](GraphType::Scatter), [line](GraphType::Line) or
-    /// [bar](GraphType::Bar) charts. A scatter chart draws only the points in the dataset, a line
-    /// char draws a line between each point, and a bar chart draws a line from the x axis to the
-    /// point.  See [`GraphType`] for more details
+    /// [`Chart`] can draw either a [scatter](GraphType::Scatter) or [line](GraphType::Line) charts.
+    /// A scatter will draw only the points in the dataset while a line will also draw a line
+    /// between them. See [`GraphType`] for more details
     ///
     /// This is a fluent setter method which must be chained or used as it consumes self
     #[must_use = "method moves the value of self and returns the modified value"]
@@ -415,9 +402,9 @@ impl<'a> Dataset<'a> {
 /// labels, legend, ...).
 struct ChartLayout {
     /// Location of the title of the x axis
-    title_x: Option<Position>,
+    title_x: Option<(u16, u16)>,
     /// Location of the title of the y axis
-    title_y: Option<Position>,
+    title_y: Option<(u16, u16)>,
     /// Location of the first label of the x axis
     label_x: Option<u16>,
     /// Location of the first label of the y axis
@@ -477,14 +464,14 @@ struct ChartLayout {
 ///     .title("X Axis".red())
 ///     .style(Style::default().white())
 ///     .bounds([0.0, 10.0])
-///     .labels(["0.0", "5.0", "10.0"]);
+///     .labels(vec!["0.0".into(), "5.0".into(), "10.0".into()]);
 ///
 /// // Create the Y axis and define its properties
 /// let y_axis = Axis::default()
 ///     .title("Y Axis".red())
 ///     .style(Style::default().white())
 ///     .bounds([0.0, 10.0])
-///     .labels(["0.0", "5.0", "10.0"]);
+///     .labels(vec!["0.0".into(), "5.0".into(), "10.0".into()]);
 ///
 /// // Create the chart and link all the parts together
 /// let chart = Chart::new(datasets)
@@ -586,7 +573,7 @@ impl<'a> Chart<'a> {
     ///     Axis::default()
     ///         .title("X Axis")
     ///         .bounds([0.0, 20.0])
-    ///         .labels(["0", "20"]),
+    ///         .labels(vec!["0".into(), "20".into()]),
     /// );
     /// ```
     #[must_use = "method moves the value of self and returns the modified value"]
@@ -609,7 +596,7 @@ impl<'a> Chart<'a> {
     ///     Axis::default()
     ///         .title("Y Axis")
     ///         .bounds([0.0, 20.0])
-    ///         .labels(["0", "20"]),
+    ///         .labels(vec!["0".into(), "20".into()]),
     /// );
     /// ```
     #[must_use = "method moves the value of self and returns the modified value"]
@@ -711,22 +698,22 @@ impl<'a> Chart<'a> {
         let mut y = area.bottom() - 1;
 
         let mut label_x = None;
-        if !self.x_axis.labels.is_empty() && y > area.top() {
+        if self.x_axis.labels.is_some() && y > area.top() {
             label_x = Some(y);
             y -= 1;
         }
 
-        let label_y = self.y_axis.labels.is_empty().not().then_some(x);
-        x += self.max_width_of_labels_left_of_y_axis(area, !self.y_axis.labels.is_empty());
+        let label_y = self.y_axis.labels.as_ref().and(Some(x));
+        x += self.max_width_of_labels_left_of_y_axis(area, self.y_axis.labels.is_some());
 
         let mut axis_x = None;
-        if !self.x_axis.labels.is_empty() && y > area.top() {
+        if self.x_axis.labels.is_some() && y > area.top() {
             axis_x = Some(y);
             y -= 1;
         }
 
         let mut axis_y = None;
-        if !self.y_axis.labels.is_empty() && x + 1 < area.right() {
+        if self.y_axis.labels.is_some() && x + 1 < area.right() {
             axis_y = Some(x);
             x += 1;
         }
@@ -747,7 +734,7 @@ impl<'a> Chart<'a> {
         if let Some(ref title) = self.x_axis.title {
             let w = title.width() as u16;
             if w < graph_area.width && graph_area.height > 2 {
-                title_x = Some(Position::new(x + graph_area.width - w, y));
+                title_x = Some((x + graph_area.width - w, y));
             }
         }
 
@@ -755,7 +742,7 @@ impl<'a> Chart<'a> {
         if let Some(ref title) = self.y_axis.title {
             let w = title.width() as u16;
             if w + 1 < graph_area.width && graph_area.height > 2 {
-                title_y = Some(Position::new(x, area.top()));
+                title_y = Some((x, area.top()));
             }
         }
 
@@ -814,13 +801,17 @@ impl<'a> Chart<'a> {
         let mut max_width = self
             .y_axis
             .labels
-            .iter()
-            .map(Line::width)
-            .max()
-            .unwrap_or_default() as u16;
+            .as_ref()
+            .map(|l| l.iter().map(Span::width).max().unwrap_or_default() as u16)
+            .unwrap_or_default();
 
-        if let Some(first_x_label) = self.x_axis.labels.first() {
-            let first_label_width = first_x_label.width() as u16;
+        if let Some(first_x_label) = self
+            .x_axis
+            .labels
+            .as_ref()
+            .and_then(|labels| labels.first())
+        {
+            let first_label_width = first_x_label.content.width() as u16;
             let width_left_of_y_axis = match self.x_axis.labels_alignment {
                 Alignment::Left => {
                     // The last character of the label should be below the Y-Axis when it exists,
@@ -845,7 +836,7 @@ impl<'a> Chart<'a> {
         graph_area: Rect,
     ) {
         let Some(y) = layout.label_x else { return };
-        let labels = &self.x_axis.labels;
+        let labels = self.x_axis.labels.as_ref().unwrap();
         let labels_len = labels.len() as u16;
         if labels_len < 2 {
             return;
@@ -907,13 +898,17 @@ impl<'a> Chart<'a> {
         Rect::new(min_x, y, max_x - min_x, 1)
     }
 
-    fn render_label(buf: &mut Buffer, label: &Line, label_area: Rect, alignment: Alignment) {
-        let label = match alignment {
-            Alignment::Left => label.clone().left_aligned(),
-            Alignment::Center => label.clone().centered(),
-            Alignment::Right => label.clone().right_aligned(),
+    fn render_label(buf: &mut Buffer, label: &Span, label_area: Rect, alignment: Alignment) {
+        let label_width = label.width() as u16;
+        let bounded_label_width = label_area.width.min(label_width);
+
+        let x = match alignment {
+            Alignment::Left => label_area.left(),
+            Alignment::Center => label_area.left() + label_area.width / 2 - bounded_label_width / 2,
+            Alignment::Right => label_area.right() - bounded_label_width,
         };
-        label.render(label_area, buf);
+
+        buf.set_span(x, label_area.top(), label, bounded_label_width);
     }
 
     fn render_y_labels(
@@ -924,7 +919,7 @@ impl<'a> Chart<'a> {
         graph_area: Rect,
     ) {
         let Some(x) = layout.label_y else { return };
-        let labels = &self.y_axis.labels;
+        let labels = self.y_axis.labels.as_ref().unwrap();
         let labels_len = labels.len() as u16;
         for (i, label) in labels.iter().enumerate() {
             let dy = i as u16 * (graph_area.height - 1) / (labels_len - 1);
@@ -962,14 +957,14 @@ impl WidgetRef for Chart<'_> {
         // Sample the style of the entire widget. This sample will be used to reset the style of
         // the cells that are part of the components put on top of the grah area (i.e legend and
         // axis names).
-        let original_style = buf[(area.left(), area.top())].style();
+        let original_style = buf.get(area.left(), area.top()).style();
 
         self.render_x_labels(buf, &layout, chart_area, graph_area);
         self.render_y_labels(buf, &layout, chart_area, graph_area);
 
         if let Some(y) = layout.axis_x {
             for x in graph_area.left()..graph_area.right() {
-                buf[(x, y)]
+                buf.get_mut(x, y)
                     .set_symbol(symbols::line::HORIZONTAL)
                     .set_style(self.x_axis.style);
             }
@@ -977,7 +972,7 @@ impl WidgetRef for Chart<'_> {
 
         if let Some(x) = layout.axis_y {
             for y in graph_area.top()..graph_area.bottom() {
-                buf[(x, y)]
+                buf.get_mut(x, y)
                     .set_symbol(symbols::line::VERTICAL)
                     .set_style(self.y_axis.style);
             }
@@ -985,7 +980,7 @@ impl WidgetRef for Chart<'_> {
 
         if let Some(y) = layout.axis_x {
             if let Some(x) = layout.axis_y {
-                buf[(x, y)]
+                buf.get_mut(x, y)
                     .set_symbol(symbols::line::BOTTOM_LEFT)
                     .set_style(self.x_axis.style);
             }
@@ -1002,36 +997,22 @@ impl WidgetRef for Chart<'_> {
                         coords: dataset.data,
                         color: dataset.style.fg.unwrap_or(Color::Reset),
                     });
-                    match dataset.graph_type {
-                        GraphType::Line => {
-                            for data in dataset.data.windows(2) {
-                                ctx.draw(&CanvasLine {
-                                    x1: data[0].0,
-                                    y1: data[0].1,
-                                    x2: data[1].0,
-                                    y2: data[1].1,
-                                    color: dataset.style.fg.unwrap_or(Color::Reset),
-                                });
-                            }
+                    if dataset.graph_type == GraphType::Line {
+                        for data in dataset.data.windows(2) {
+                            ctx.draw(&CanvasLine {
+                                x1: data[0].0,
+                                y1: data[0].1,
+                                x2: data[1].0,
+                                y2: data[1].1,
+                                color: dataset.style.fg.unwrap_or(Color::Reset),
+                            });
                         }
-                        GraphType::Bar => {
-                            for (x, y) in dataset.data {
-                                ctx.draw(&CanvasLine {
-                                    x1: *x,
-                                    y1: 0.0,
-                                    x2: *x,
-                                    y2: *y,
-                                    color: dataset.style.fg.unwrap_or(Color::Reset),
-                                });
-                            }
-                        }
-                        GraphType::Scatter => {}
                     }
                 })
                 .render(graph_area, buf);
         }
 
-        if let Some(Position { x, y }) = layout.title_x {
+        if let Some((x, y)) = layout.title_x {
             let title = self.x_axis.title.as_ref().unwrap();
             let width = graph_area
                 .right()
@@ -1049,7 +1030,7 @@ impl WidgetRef for Chart<'_> {
             buf.set_line(x, y, title, width);
         }
 
-        if let Some(Position { x, y }) = layout.title_y {
+        if let Some((x, y)) = layout.title_y {
             let title = self.y_axis.title.as_ref().unwrap();
             let width = graph_area
                 .right()
@@ -1212,14 +1193,12 @@ mod tests {
     fn graph_type_to_string() {
         assert_eq!(GraphType::Scatter.to_string(), "Scatter");
         assert_eq!(GraphType::Line.to_string(), "Line");
-        assert_eq!(GraphType::Bar.to_string(), "Bar");
     }
 
     #[test]
     fn graph_type_from_str() {
         assert_eq!("Scatter".parse::<GraphType>(), Ok(GraphType::Scatter));
         assert_eq!("Line".parse::<GraphType>(), Ok(GraphType::Line));
-        assert_eq!("Bar".parse::<GraphType>(), Ok(GraphType::Bar));
         assert_eq!("".parse::<GraphType>(), Err(ParseError::VariantNotFound));
     }
 
@@ -1479,40 +1458,5 @@ mod tests {
             .hidden_legend_constraints((Constraint::Percentage(100), Constraint::Percentage(100)));
         chart.render(buffer.area, &mut buffer);
         assert_eq!(buffer, Buffer::with_lines(expected));
-    }
-
-    #[test]
-    fn bar_chart() {
-        let data = [
-            (0.0, 0.0),
-            (2.0, 1.0),
-            (4.0, 4.0),
-            (6.0, 8.0),
-            (8.0, 9.0),
-            (10.0, 10.0),
-        ];
-        let chart = Chart::new(vec![Dataset::default()
-            .data(&data)
-            .marker(symbols::Marker::Dot)
-            .graph_type(GraphType::Bar)])
-        .x_axis(Axis::default().bounds([0.0, 10.0]))
-        .y_axis(Axis::default().bounds([0.0, 10.0]));
-        let area = Rect::new(0, 0, 11, 11);
-        let mut buffer = Buffer::empty(area);
-        chart.render(buffer.area, &mut buffer);
-        let expected = Buffer::with_lines([
-            "          •",
-            "        • •",
-            "      • • •",
-            "      • • •",
-            "      • • •",
-            "      • • •",
-            "    • • • •",
-            "    • • • •",
-            "    • • • •",
-            "  • • • • •",
-            "• • • • • •",
-        ]);
-        assert_eq!(buffer, expected);
     }
 }

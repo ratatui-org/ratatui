@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, iter, num::NonZeroUsize, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, iter, num::NonZeroUsize, rc::Rc, sync::OnceLock};
 
 use cassowary::{
     strength::REQUIRED,
@@ -37,9 +37,7 @@ type Cache = LruCache<(Rect, Layout), (Segments, Spacers)>;
 const FLOAT_PRECISION_MULTIPLIER: f64 = 100.0;
 
 thread_local! {
-    static LAYOUT_CACHE: RefCell<Cache> = RefCell::new(Cache::new(
-        NonZeroUsize::new(Layout::DEFAULT_CACHE_SIZE).unwrap(),
-    ));
+    static LAYOUT_CACHE: OnceLock<RefCell<Cache>> = const { OnceLock::new() };
 }
 
 /// A layout is a set of constraints that can be applied to a given area to split it into smaller
@@ -107,7 +105,7 @@ thread_local! {
 /// example](https://camo.githubusercontent.com/77d22f3313b782a81e5e033ef82814bb48d786d2598699c27f8e757ccee62021/68747470733a2f2f7668732e636861726d2e73682f7668732d315a4e6f4e4c4e6c4c746b4a58706767396e435635652e676966)
 ///
 /// [`cassowary-rs`]: https://crates.io/crates/cassowary
-/// [Examples]: https://github.com/ratatui/ratatui/blob/main/examples/README.md
+/// [Examples]: https://github.com/ratatui-org/ratatui/blob/main/examples/README.md
 #[derive(Debug, Default, Clone, Eq, PartialEq, Hash)]
 pub struct Layout {
     direction: Direction,
@@ -211,9 +209,22 @@ impl Layout {
     /// that subsequent calls with the same parameters are faster. The cache is a `LruCache`, and
     /// grows until `cache_size` is reached.
     ///
-    /// By default, the cache size is [`Self::DEFAULT_CACHE_SIZE`].
-    pub fn init_cache(cache_size: NonZeroUsize) {
-        LAYOUT_CACHE.with_borrow_mut(|c| c.resize(cache_size));
+    /// Returns true if the cell's value was set by this call.
+    /// Returns false if the cell's value was not set by this call, this means that another thread
+    /// has set this value or that the cache size is already initialized.
+    ///
+    /// Note that a custom cache size will be set only if this function:
+    /// * is called before [`Layout::split()`] otherwise, the cache size is
+    ///   [`Self::DEFAULT_CACHE_SIZE`].
+    /// * is called for the first time, subsequent calls do not modify the cache size.
+    pub fn init_cache(cache_size: usize) -> bool {
+        LAYOUT_CACHE
+            .with(|c| {
+                c.set(RefCell::new(LruCache::new(
+                    NonZeroUsize::new(cache_size).unwrap(),
+                )))
+            })
+            .is_ok()
     }
 
     /// Set the direction of the layout.
@@ -428,7 +439,7 @@ impl Layout {
     /// ```rust
     /// # use ratatui::prelude::*;
     /// # fn render(frame: &mut Frame) {
-    /// let area = frame.area();
+    /// let area = frame.size();
     /// let layout = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]);
     /// let [top, main] = layout.areas(area);
     ///
@@ -460,7 +471,7 @@ impl Layout {
     /// ```rust
     /// # use ratatui::prelude::*;
     /// # fn render(frame: &mut Frame) {
-    /// let area = frame.area();
+    /// let area = frame.size();
     /// let layout = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]);
     /// let [top, main] = layout.areas(area);
     /// let [before, inbetween, after] = layout.spacers(area);
@@ -560,10 +571,17 @@ impl Layout {
     /// );
     /// ```
     pub fn split_with_spacers(&self, area: Rect) -> (Segments, Spacers) {
-        LAYOUT_CACHE.with_borrow_mut(|c| {
-            let key = (area, self.clone());
-            c.get_or_insert(key, || self.try_split(area).expect("failed to split"))
-                .clone()
+        LAYOUT_CACHE.with(|c| {
+            c.get_or_init(|| {
+                RefCell::new(LruCache::new(
+                    NonZeroUsize::new(Self::DEFAULT_CACHE_SIZE).unwrap(),
+                ))
+            })
+            .borrow_mut()
+            .get_or_insert((area, self.clone()), || {
+                self.try_split(area).expect("failed to split")
+            })
+            .clone()
         })
     }
 
@@ -590,7 +608,7 @@ impl Layout {
         // This is equivalent to storing the solver in `Layout` and calling `solver.reset()` here.
         let mut solver = Solver::new();
 
-        let inner_area = area.inner(self.margin);
+        let inner_area = area.inner(&self.margin);
         let (area_start, area_end) = match self.direction {
             Direction::Horizontal => (
                 f64::from(inner_area.x) * FLOAT_PRECISION_MULTIPLIER,
@@ -1081,14 +1099,37 @@ mod tests {
     }
 
     #[test]
-    fn cache_size() {
-        LAYOUT_CACHE.with_borrow(|c| {
-            assert_eq!(c.cap().get(), Layout::DEFAULT_CACHE_SIZE);
+    fn custom_cache_size() {
+        assert!(Layout::init_cache(10));
+        assert!(!Layout::init_cache(15));
+        LAYOUT_CACHE.with(|c| {
+            assert_eq!(c.get().unwrap().borrow().cap().get(), 10);
         });
+    }
 
-        Layout::init_cache(NonZeroUsize::new(10).unwrap());
-        LAYOUT_CACHE.with_borrow(|c| {
-            assert_eq!(c.cap().get(), 10);
+    #[test]
+    fn default_cache_size() {
+        let target = Rect {
+            x: 2,
+            y: 2,
+            width: 10,
+            height: 10,
+        };
+
+        Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Percentage(10),
+                Constraint::Max(5),
+                Constraint::Min(1),
+            ])
+            .split(target);
+        assert!(!Layout::init_cache(15));
+        LAYOUT_CACHE.with(|c| {
+            assert_eq!(
+                c.get().unwrap().borrow().cap().get(),
+                Layout::DEFAULT_CACHE_SIZE
+            );
         });
     }
 
@@ -1315,9 +1356,9 @@ mod tests {
                 .flex(flex)
                 .split(area);
             let mut buffer = Buffer::empty(area);
-            for (c, &area) in ('a'..='z').take(constraints.len()).zip(layout.iter()) {
+            for (i, c) in ('a'..='z').take(constraints.len()).enumerate() {
                 let s = c.to_string().repeat(area.width as usize);
-                Paragraph::new(s).render(area, &mut buffer);
+                Paragraph::new(s).render(layout[i], &mut buffer);
             }
             assert_eq!(buffer, Buffer::with_lines([expected]));
         }
@@ -1840,11 +1881,14 @@ mod tests {
 
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Percentage(10),
-                    Constraint::Max(5),
-                    Constraint::Min(1),
-                ])
+                .constraints(
+                    [
+                        Constraint::Percentage(10),
+                        Constraint::Max(5),
+                        Constraint::Min(1),
+                    ]
+                    .as_ref(),
+                )
                 .split(target);
 
             assert_eq!(target.height, chunks.iter().map(|r| r.height).sum::<u16>());
@@ -1888,7 +1932,7 @@ mod tests {
             );
 
             // minimal bug from
-            // https://github.com/ratatui/ratatui/pull/404#issuecomment-1681850644
+            // https://github.com/ratatui-org/ratatui/pull/404#issuecomment-1681850644
             // TODO: check if this bug is now resolved?
             let layout = Layout::default()
                 .constraints([Min(1), Length(0), Min(1)])
