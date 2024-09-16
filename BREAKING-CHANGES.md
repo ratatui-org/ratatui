@@ -65,6 +65,13 @@ This is a quick summary of the sections below:
   - MSRV is now 1.63.0
   - `List` no longer ignores empty strings
 
+## v0.29.0
+
+### `Rect::area()` now returns u32 instead of u16 ([#1378])
+
+This is likely to impact anything which relies on `Rect::area` maxing out at u16::MAX. It can now
+return up to u16::MAX * u16::MAX (2^32 - 2^17 + 1).
+
 ## v0.28.0
 
 ### `Backend::size` returns `Size` instead of `Rect` ([#1254])
@@ -135,8 +142,6 @@ are also named terminal, and confusion about module exports for newer Rust users
 This change simplifies the trait and makes it easier to implement.
 
 ### `Frame::size` is deprecated and renamed to `Frame::area`
-
-[#1293]: https://github.com/ratatui/ratatui/pull/1293
 
 `Frame::size` is renamed to `Frame::area` as it's the more correct name.
 
