@@ -358,8 +358,6 @@ impl From<(Position, Size)> for Rect {
 
 #[cfg(test)]
 mod tests {
-    use std::u16;
-
     use rstest::rstest;
 
     use super::*;
@@ -528,7 +526,7 @@ mod tests {
                 width: 100,
                 height: 1000
             }
-        )
+        );
     }
 
     #[test]
