@@ -10,6 +10,8 @@ GitHub with a [breaking change] label.
 
 This is a quick summary of the sections below:
 
+- [v0.28.1]
+  - `Terminal`, `Buffer`, `Cell`, `Frame` are no longer `Sync` / `RefUnwindSafe`
 - [v0.28.0](#v0280)
   ⁻ `Backend::size` returns `Size` instead of `Rect`
   - `Backend` trait migrates to `get/set_cursor_position`
@@ -64,6 +66,19 @@ This is a quick summary of the sections below:
 - [v0.20.0](#v0200)
   - MSRV is now 1.63.0
   - `List` no longer ignores empty strings
+
+## v0.28.1
+
+### `Terminal`, `Buffer`, `Cell`, `Frame` are no longer `Sync` / `RefUnwindSafe` [#1339]
+
+[#1339]: https://github.com/ratatui/ratatui/pull/1339
+
+In #1339, we added a cache of the Cell width which uses a std::cell::Cell. This causes `Cell` and
+all types that contain this (`Terminal`, `Buffer`, `Frame`, `CompletedFrame`, `TestBackend`) to no
+longer be `Sync`
+
+This change is unlikely to cause problems as these types likely should not be sent between threads
+regardless due to their interaction with various things which mutated externally (e.g. stdio).
 
 ## v0.28.0
 
